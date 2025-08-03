@@ -1,0 +1,166 @@
+* Push the limits
+* Bar Raisers are trained interviewers independent of the hiring team, empowered to veto hires and ensure every candidate hired is 
+superior to at least half of current employees at that level.
+* Technical assessments: Online coding rounds (often time-boxed, high-difficulty algorithms/data structures).
+* Onsite loops: Usually 4–6 interviews, covering in-depth coding, system design (especially for senior roles), and behavioral evaluation
+
+What are the top 10 situation based azure databricks architect questions for 15+ years of experienced person to test the depth of the candidate in google interview standards
+
+ChatGpt AI:
+
+1. Designing a Multi-Region High Availability Architecture
+Situation: Your organization wants to ensure business continuity for a critical data pipeline built on Azure Databricks that processes 5 TB of data daily. It should be available across two Azure regions.
+
+Question:
+How would you design a highly available, disaster-resilient Databricks pipeline across two Azure regions with minimal downtime and data loss? What services would you use to ensure Delta Lake consistency and metadata integrity?
+
+✅ 2. Handling Slowly Changing Dimensions (SCD Type 2) at Scale
+Situation: A retail client has billions of historical customer records. They want to track changes in address and contact details with auditability.
+
+Question:
+Explain how you would implement SCD Type 2 using Delta Lake in Azure Databricks to support both batch and streaming ingestion. How would you ensure correctness and performance?
+
+✅ 3. End-to-End Real-Time Architecture for Fraud Detection
+Situation: You’re tasked with designing a fraud detection system where streaming data from payment gateways must be analyzed within 1 second.
+
+Question:
+Design an end-to-end real-time data pipeline using Azure Databricks, Autoloader, Delta Lake, and other Azure services to flag frauds in near real-time. Include monitoring and failure handling.
+
+✅ 4. Cost Optimization in a Large-Scale Databricks Project
+Situation: Your Databricks workloads have grown significantly. The monthly Azure bill for Databricks compute exceeds ₹30 lakhs (~$36k USD).
+
+Question:
+How would you optimize costs across interactive notebooks, jobs, clusters, and data storage, while still ensuring SLA? Give specific tuning and architectural decisions.
+
+✅ 5. CI/CD Strategy for Databricks with Multiple Teams
+Situation: Multiple data engineering teams are collaborating on a shared Databricks workspace.
+
+Question:
+Describe how you would set up a Git-driven CI/CD pipeline using Azure DevOps or GitHub Actions for Databricks notebooks, DLT pipelines, and infrastructure-as-code. How would you manage merge conflicts and promote code across environments?
+
+✅ 6. Reprocessing Strategy After Pipeline Failures
+Situation: A critical production DLT pipeline has silently failed for 3 days. Now, there's a backlog of 2 TB of JSON files in ADLS Gen2.
+
+Question:
+How would you design a reprocessing strategy that avoids duplicate inserts, handles idempotency, and minimizes latency using Databricks and Delta Lake capabilities?
+
+✅ 7. Multi-Source Ingestion Strategy into Bronze Layer
+Situation: Your system needs to ingest data from SAP (via OData), REST APIs, on-prem SQL Server, and Kafka into Databricks.
+
+Question:
+How would you architect and automate ingestion from these heterogeneous sources into the Bronze layer while ensuring schema evolution, monitoring, and fault tolerance?
+
+✅ 8. Performance Troubleshooting of a Slow Pipeline
+Situation: A Databricks job that used to complete in 20 minutes now takes 2 hours.
+
+Question:
+How would you diagnose and optimize the job? Which tools, logs, or query plans would you analyze? What Spark or Delta optimizations would you apply?
+
+✅ 9. Data Lineage and Data Quality Strategy
+Situation: The compliance team requires full end-to-end lineage of all datasets with data quality checks and alerts.
+
+Question:
+How would you implement automated data quality enforcement, logging, and lineage tracking in Databricks pipelines? Include tools like Unity Catalog, EXPECT, or custom frameworks.
+
+✅ 10. Migrating from Legacy ETL (SSIS/Informatica) to Databricks
+Situation: A large bank is migrating 100+ legacy ETL workflows from Informatica to Databricks.
+
+Question:
+What approach would you take to assess, prioritize, and migrate these pipelines? What challenges would you anticipate in terms of dependencies, performance, and data accuracy?
+
+---------------------------------------------------------------------------
+
+Gemini AI
+
+For a candidate with 15+ years of experience, a Google interview for an Azure Databricks architect role will go far beyond basic definitions. The questions will be highly situational, designed to test their ability to think like a senior architect, manage complex trade-offs, and demonstrate a deep, practical understanding of the entire data platform ecosystem. The focus will be on their decision-making process, not just the correct answer.
+
+Here are 10 top-tier, situation-based Azure Databricks architect questions, designed to Google's interview standards:
+
+1. The Multi-Tenant Platform Challenge
+Scenario: "A large enterprise wants to build a new, multi-tenant data platform on Azure Databricks to support multiple business units, each with its own data and user base. Each business unit has different data sensitivity and cost tolerance. How would you design the platform's architecture to ensure data isolation, cost management, and efficient resource sharing? Detail your approach to security, governance, and cluster policy implementation."
+
+What it tests: This question probes for a candidate's understanding of multi-tenancy, a common and difficult architectural challenge. It requires knowledge of Unity Catalog for governance, role-based access control (RBAC), cluster policies for cost control, and a solid grasp of Azure's overall security model (e.g., VNet injection, private endpoints, managed identity). The best answers will discuss the trade-offs between full isolation (separate workspaces) and shared resources (single workspace with strong RBAC).
+
+2. The Real-Time Anomaly Detection System
+Scenario: "You need to architect a real-time anomaly detection system for a financial services company. The system must ingest high-velocity data from millions of transactions, process it in near real-time, and flag suspicious activities. The output of the Databricks job needs to be fed into a dashboard for analysts. How would you design this end-to-end solution using Azure Databricks? Be specific about the components, data ingestion, processing logic, and the technologies you would use for a 'hot' and 'cold' path."
+
+What it tests: This is a classic "systems design" question. It tests knowledge of Spark Structured Streaming, Delta Live Tables, and the integration of Databricks with other Azure services like Event Hubs or Kafka for ingestion. The candidate should be able to discuss stateful vs. stateless processing, watermarking, fault tolerance, and the architectural choices for serving the data (e.g., Databricks SQL Analytics, Power BI, or a separate data store).
+
+3. The Performance Bottleneck Investigation
+Scenario: "A critical ETL job running on a Databricks cluster has started to fail intermittently with OOM (Out-of-Memory) errors and has seen a 5x increase in runtime. The data volume has not significantly changed. You are the architect tasked with debugging and resolving this issue. What is your systematic approach to diagnose the problem? What tools and metrics would you use, and what are the potential causes you would investigate?"
+
+What it tests: This question is all about practical, hands-on experience and problem-solving methodology. A senior candidate should not just list possible fixes but provide a structured approach. The answer should cover using the Spark UI to analyze stages and tasks, looking for data skew, shuffle spills, and broadcast join issues. They should also discuss driver vs. executor memory, garbage collection, and how to use Databricks' monitoring tools and logs to identify the root cause.
+
+4. The Data Migration and Modernization Project
+Scenario: "Your company is migrating a legacy on-premises data warehouse to a modern Lakehouse architecture on Azure. The data is currently in a proprietary database format and needs to be moved to Azure Data Lake Storage (ADLS Gen2) and transformed into Delta tables. You also have to handle slowly changing dimensions (SCD Type 2) for historical data. Design a scalable and repeatable migration pipeline using Azure Databricks. How do you handle data quality checks, data lineage, and ensuring minimal downtime during the transition?"
+
+What it tests: This tests a candidate's ability to design a complete data pipeline, not just a single job. It requires knowledge of data formats (Parquet, Delta), SCD patterns, and the tooling for a robust ETL/ELT process (e.g., Auto Loader, Delta Live Tables). The discussion should include concepts like schema evolution, data quality rules (e.g., expectations in DLT), and the use of Azure Data Factory or Databricks Workflows for orchestration.
+
+5. The Enterprise Security and Governance Framework
+Scenario: "A Chief Data Officer (CDO) is concerned about data security and governance. They want a robust framework that enforces row-level and column-level security, tracks data lineage from source to dashboard, and provides a centralized audit trail for compliance. You must present an architecture to the CDO that achieves these goals. How would you leverage Databricks Unity Catalog and integrate it with other Azure services to build this framework?"
+
+What it tests: This question assesses the candidate's understanding of the entire security and governance ecosystem. The answer should be centered around Unity Catalog as the central point of control. Key points include external metastores, managing identities with Azure Active Directory (AAD), defining granular access policies, and using Databricks' audit logs. The candidate should be able to articulate how this approach meets compliance requirements and provides a single pane of glass for data governance.
+
+6. The Cost Optimization Initiative
+Scenario: "Your organization's monthly Azure Databricks bill has become a significant concern. You have been tasked with identifying and implementing cost-saving measures without impacting the performance of critical production workloads. What are your top three strategies for cost optimization on Azure Databricks? For each strategy, explain the technical implementation details and the potential trade-offs."
+
+What it tests: This is a crucial question for a senior architect. It shows if they think about the business impact of their designs. The candidate should discuss cluster policies for controlling instance types, auto-scaling, and auto-termination. They should also mention using different compute types (e.g., job clusters vs. all-purpose clusters), leveraging Photon for performance, and optimizing Spark jobs to reduce resource consumption (e.g., reducing shuffles, using z-ordering). The ability to articulate trade-offs (e.g., cost vs. cold start time) is key.
+
+7. The Machine Learning Model Deployment
+Scenario: "A data science team has developed a new machine learning model in a Databricks notebook. They want to deploy this model as a real-time API endpoint that can be consumed by an external web application. The model needs to be continuously retrained and updated. Architect a solution that automates the deployment, provides a low-latency serving endpoint, and includes a CI/CD pipeline for model updates."
+
+What it tests: This question goes beyond traditional data engineering and into MLOps. The candidate should discuss using MLflow for model tracking and registration, and then deploying the model using Databricks Model Serving. They should also detail the CI/CD pipeline using Azure DevOps or GitHub Actions, which would automatically trigger model retraining and a new deployment upon a change in the code or data. The answer should also consider a canary or blue/green deployment strategy to ensure zero downtime.
+
+8. The Cross-Cloud Databricks Architecture
+Scenario: "A company with a hybrid-cloud strategy needs to process data from both Azure and another cloud provider (e.g., AWS or GCP) using a single Databricks platform. Design an architecture that allows a central Azure Databricks workspace to securely and efficiently access and process data residing in the other cloud. Discuss the networking, security, and data access challenges and how you would solve them."
+
+What it tests: This tests a candidate's deep understanding of cloud networking and security principles, not just Databricks. The answer should cover establishing secure connectivity (e.g., VPN, ExpressRoute) between the clouds, using VNet injection in Databricks, and configuring cross-cloud data access with appropriate identity and access management (IAM) roles. It shows the ability to architect solutions that go beyond a single-cloud environment.
+
+9. The Data Quality and Observability Framework
+Scenario: "Your company is building a mission-critical data platform on Databricks. You need to implement a robust data quality and observability framework. The goal is to ensure that all data pipelines produce high-quality, trustworthy data and that any failures are immediately detected and alerted. Design this framework, including the tools and methodologies you would use to monitor, validate, and alert on data quality issues."
+
+What it tests: This is about a holistic approach to data reliability. The candidate should discuss using a combination of tools and techniques: built-in DLT expectations for data validation, Spark listeners for monitoring job metrics, and integrating with Azure Monitor and Log Analytics for centralized logging and alerting. They should also mention implementing data quality checks as part of the CI/CD pipeline and how a lakehouse architecture with Delta Lake can help with time-travel and data recovery.
+
+10. The Disaster Recovery and Business Continuity Plan
+Scenario: "A large-scale Databricks platform in your organization is processing sensitive and critical data. Design a disaster recovery and business continuity plan that ensures minimal data loss and a low RTO (Recovery Time Objective) in the event of a regional Azure outage. Detail the architectural choices, backup strategies, and a plan for how you would fail over and fail back the entire Databricks environment."
+
+What it tests: This question separates the senior architects from the experienced practitioners. It requires a deep understanding of multi-region architecture and the distinction between data plane and control plane. The candidate should discuss a multi-region deployment, using geo-redundant storage (e.g., GZRS for ADLS Gen2), and the tools for orchestrating the failover of the Databricks control plane (e.g., Databricks CLI, APIs). The best answers will also cover how to handle metadata synchronization (Unity Catalog) and the process for regularly testing the DR plan.
+
+---------------------------------------------------------------------------
+Perplexity AI:
+
+1. Designing a Scalable Data Lakehouse
+You are asked to design a scalable Azure-based data lakehouse architecture for a global retail chain with real-time transaction ingestion, historical analytics, and GDPR compliance. Explain your end-to-end solution, how you’d ensure security, data quality, and regulatory adherence. What trade-offs would you consider regarding cost, scalability, and latency? 
+
+2. Diagnosing and Optimizing Job Failures
+A critical ETL job in your Azure Databricks environment failed overnight. Explain in depth how you would analyze logs, identify root causes, and systematically troubleshoot issues related to cluster configuration, resource contention, version conflicts, or dependency errors. Share how you would communicate and document your process to both technical and non-technical partners. 
+
+3. Handling Cluster Slowness for High-Volume Workloads
+A production cluster handling streaming and batch jobs is running slowly. Walk through how you use Spark UI, resource monitoring, and Databricks utilities to pinpoint bottlenecks and optimize memory, partitioning, and code performance. Discuss how you balance cost and performance in your optimizations. 
+
+4. Implementing Incremental Data Processing
+Your job is to implement near real-time incremental data processing for petabyte-scale data on Delta Lake. Describe how you’d use change data capture (CDC), MERGE operations, and partitioning. How do you ensure minimal downtime, data consistency, and auditing? 
+
+5. Cross-Team Collaboration: Version Control and CI/CD
+Your engineering teams are distributed globally and collaborating on shared Databricks notebooks and pipelines. Describe your workflow for versioning, reviewing, and deploying code changes. How do you enable productive CI/CD practices with Azure DevOps or GitHub, and what challenges/solutions would you propose for code and environment synchronization? 
+
+6. Migration of Legacy Pipelines to Azure Databricks
+Describe the approach, challenges, and quality controls for migrating a legacy Hadoop or on-premises Spark pipeline to the Azure Databricks platform. What would your cutover strategy be to minimize business impact? 
+
+7. Real-time Data Analytics with Streaming Sources
+You’re tasked with building a real-time analytics dashboard on top of streaming financial data using Azure Databricks, integrating sources like Kafka or Event Hubs. What are the architectural considerations? How would you ensure stateful processing, idempotency, low-latency, and fault tolerance? 
+
+8. Securing Sensitive Data in Multi-Tenant Environments
+Describe your approach to securing PII data at rest and in motion in an Azure Databricks environment shared by multiple teams. Discuss solutions for RBAC, Unity Catalog, encryption, fine-grained access control, and auditing for compliance frameworks (GDPR, HIPAA, PCI-DSS). 
+
+9. Designing for Disaster Recovery and High Availability
+Suppose your company depends on Azure Databricks for mission-critical operations. How would you design your architecture for resilience, backup/restore, disaster recovery, and high availability spanning multiple Azure regions? Discuss RPO/RTO considerations and testing protocols. 
+
+10. Trade-offs in Cost/Performance for Data Pipelines
+A business leader requests a significant decrease in monthly Azure Databricks spend but still expects high data freshness and pipeline performance. How would you review, analyze, and recommend architectural or operational changes? Share your framework for balancing cost, performance, and maintainability at scale. 
+
+These situation-based questions are designed to test the depth of architectural, operational, and strategic thinking expected at senior levels in top tech companies like Google. Each scenario focuses on real-world challenges—scalability, security, reliability, data governance, and cost-performance trade-offs—while demanding strong storytelling, decision-making, and technical justification skills.
+------------------------------------------------------------------
+
+
+
