@@ -1,0 +1,439 @@
+# Complete Git Development Workflow - Hello World Project
+# This covers all major git scenarios from setup to advanced operations
+
+# =============================================================================
+# INITIAL SETUP & CONFIGURATION
+# =============================================================================
+
+# Configure git user (global settings)
+git config --global user.name "John Developer"
+git config --global user.email "john@example.com"
+git config --global init.defaultBranch main
+git config --global pull.rebase false
+git config --global core.editor "code --wait"
+
+# View current configuration
+git config --list
+git config --global --list
+
+# =============================================================================
+# PROJECT INITIALIZATION
+# =============================================================================
+
+# Create and initialize a new project
+mkdir hello-world-project
+cd hello-world-project
+git init
+
+# Create initial files
+echo "# Hello World Project" > README.md
+echo "print('Hello, World!')" > hello.py
+echo "console.log('Hello, World!');" > hello.js
+
+# Create .gitignore file
+cat << EOF > .gitignore
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+
+# Node.js
+node_modules/
+npm-debug.log*
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+EOF
+
+# Initial commit
+git add .
+git status
+git commit -m "Initial commit: Add hello world files and gitignore"
+
+# =============================================================================
+# REMOTE REPOSITORY SETUP
+# =============================================================================
+
+# Add remote origin (assuming you have a repo on GitHub)
+git remote add origin https://github.com/username/hello-world-project.git
+git remote -v
+
+# Push to remote repository
+git push -u origin main
+
+# =============================================================================
+# FEATURE DEVELOPMENT WORKFLOW
+# =============================================================================
+
+# Create and switch to a new feature branch (modern way)
+git switch -c feature/add-greeting-function
+
+# Develop the feature
+cat << EOF > greetings.py
+def greet(name="World"):
+    """Return a personalized greeting."""
+    return f"Hello, {name}!"
+
+def farewell(name="World"):
+    """Return a personalized farewell."""
+    return f"Goodbye, {name}!"
+
+if __name__ == "__main__":
+    print(greet())
+    print(greet("Alice"))
+    print(farewell("Alice"))
+EOF
+
+# Update main hello.py to use the new function
+cat << EOF > hello.py
+from greetings import greet, farewell
+
+print(greet())
+print(greet("Python Developer"))
+print(farewell("Python Developer"))
+EOF
+
+# Stage and commit changes
+git add greetings.py
+git add hello.py
+git status
+git commit -m "Add greeting and farewell functions
+
+- Create greetings.py module with greet() and farewell() functions
+- Update hello.py to use the new functions
+- Add personalized greeting support"
+
+# =============================================================================
+# VIEWING HISTORY AND LOGS
+# =============================================================================
+
+# Various ways to view commit history
+git log
+git log --oneline
+git log --graph --oneline --all
+git log --author="John"
+git log --since="1 day ago"
+git log --grep="greeting"
+git log -p  # Show patch/diff for each commit
+git log --stat  # Show file change statistics
+
+# Show specific commit details
+git show HEAD
+git show HEAD~1
+
+# =============================================================================
+# COLLABORATIVE WORKFLOW
+# =============================================================================
+
+# Push feature branch to remote
+git push -u origin feature/add-greeting-function
+
+# Switch back to main and simulate pulling changes from collaborators
+git switch main
+git pull origin main
+
+# =============================================================================
+# MERGE AND REBASE SCENARIOS
+# =============================================================================
+
+# Merge feature branch into main
+git merge feature/add-greeting-function
+git push origin main
+
+# Create another feature branch for rebase example
+git switch -c feature/add-language-support
+
+# Add language support
+cat << EOF > languages.py
+GREETINGS = {
+    'english': 'Hello',
+    'spanish': 'Hola',
+    'french': 'Bonjour',
+    'german': 'Hallo',
+    'italian': 'Ciao'
+}
+
+def greet_in_language(name="World", language="english"):
+    """Greet in different languages."""
+    greeting = GREETINGS.get(language.lower(), GREETINGS['english'])
+    return f"{greeting}, {name}!"
+EOF
+
+git add languages.py
+git commit -m "Add multi-language greeting support"
+
+# Update greetings.py to use languages
+cat << EOF >> greetings.py
+
+from languages import greet_in_language
+
+def multilingual_greet(name="World", language="english"):
+    """Greet using the language module."""
+    return greet_in_language(name, language)
+EOF
+
+git add greetings.py
+git commit -m "Integrate multi-language support into greetings module"
+
+# Simulate main branch having new commits (create them on main)
+git switch main
+echo "# Project Status: In Development" >> README.md
+git add README.md
+git commit -m "Update README with project status"
+
+echo "## Installation\npip install -r requirements.txt" >> README.md
+git add README.md
+git commit -m "Add installation instructions to README"
+
+# Switch back to feature branch and rebase
+git switch feature/add-language-support
+git rebase main
+
+# =============================================================================
+# CONFLICT RESOLUTION (Simulated)
+# =============================================================================
+
+# Create a conflicting change scenario
+git switch main
+cat << EOF > hello.py
+# Main version of hello.py
+from greetings import greet, farewell
+
+def main():
+    print("=== Hello World Application ===")
+    print(greet())
+    print(greet("Python Developer"))
+    print(farewell("Python Developer"))
+
+if __name__ == "__main__":
+    main()
+EOF
+
+git add hello.py
+git commit -m "Restructure hello.py with main function"
+
+# Create conflicting change on feature branch
+git switch feature/add-language-support
+cat << EOF > hello.py
+# Feature version of hello.py
+from greetings import greet, farewell, multilingual_greet
+
+print("Welcome to the Multi-language Hello World!")
+print(greet())
+print(multilingual_greet("Developer", "spanish"))
+print(multilingual_greet("Developer", "french"))
+print(farewell("Developer"))
+EOF
+
+git add hello.py
+git commit -m "Update hello.py to demonstrate multi-language features"
+
+# Attempt merge (this would create a conflict)
+git switch main
+# git merge feature/add-language-support  # This would show conflict
+
+# Instead, let's resolve manually and commit
+cat << EOF > hello.py
+# Resolved version combining both approaches
+from greetings import greet, farewell, multilingual_greet
+
+def main():
+    print("=== Multi-language Hello World Application ===")
+    print(greet())
+    print(greet("Python Developer"))
+    print(multilingual_greet("Developer", "spanish"))
+    print(multilingual_greet("Developer", "french"))
+    print(farewell("Developer"))
+
+if __name__ == "__main__":
+    main()
+EOF
+
+git add hello.py
+git commit -m "Merge multi-language features into main
+
+Resolved conflicts between main function structure and 
+multi-language demonstration features."
+
+# =============================================================================
+# CHERRY-PICKING
+# =============================================================================
+
+# Create a hotfix branch
+git switch -c hotfix/fix-typo
+
+# Make a small fix
+sed -i 's/Hallo/Guten Tag/' languages.py
+git add languages.py
+git commit -m "Fix German greeting typo"
+
+# Switch to main and cherry-pick the fix
+git switch main
+git cherry-pick hotfix/fix-typo
+
+# =============================================================================
+# ADVANCED GIT OPERATIONS
+# =============================================================================
+
+# View reflog to see all HEAD movements
+git reflog
+git reflog --oneline
+
+# Create a tag for release
+git tag -a v1.0.0 -m "First release with multi-language support"
+git tag --list
+
+# Push tags to remote
+git push origin --tags
+
+# Stashing work in progress
+git switch -c feature/add-tests
+echo "import unittest" > test_greetings.py
+git add test_greetings.py
+
+# Stash the work
+git stash push -m "Work in progress on test suite"
+git stash list
+
+# Switch branches and come back
+git switch main
+git switch feature/add-tests
+
+# Restore stashed work
+git stash pop
+
+# =============================================================================
+# INTERACTIVE REBASE
+# =============================================================================
+
+# Create multiple commits for squashing example
+echo "# Test file" > temp_test.py
+git add temp_test.py
+git commit -m "Add temp test file"
+
+echo "# Updated test" > temp_test.py
+git add temp_test.py
+git commit -m "Update temp test"
+
+echo "# Final test version" > temp_test.py
+git add temp_test.py
+git commit -m "Finalize temp test"
+
+# Interactive rebase to squash commits (would open editor)
+# git rebase -i HEAD~3
+
+# =============================================================================
+# BRANCH MANAGEMENT
+# =============================================================================
+
+# List all branches
+git branch -a
+git branch -r  # Remote branches only
+
+# Delete merged feature branch
+git branch -d feature/add-greeting-function
+
+# Force delete unmerged branch (be careful!)
+# git branch -D feature/unwanted-feature
+
+# Rename current branch
+git branch -m feature/add-tests feature/unit-tests
+
+# =============================================================================
+# RESET AND RESTORE OPERATIONS
+# =============================================================================
+
+# Soft reset (keeps changes staged)
+# git reset --soft HEAD~1
+
+# Mixed reset (unstages changes but keeps in working directory)
+# git reset HEAD~1
+
+# Hard reset (discards all changes - DANGEROUS!)
+# git reset --hard HEAD~1
+
+# Restore specific file from specific commit
+# git restore --source=HEAD~2 hello.py
+
+# Restore all files in working directory
+# git restore .
+
+# =============================================================================
+# WORKING WITH REMOTES
+# =============================================================================
+
+# Fetch changes without merging
+git fetch origin
+
+# Fetch and prune deleted remote branches
+git fetch -p
+
+# Push all branches
+git push --all origin
+
+# Set upstream tracking for current branch
+git push -u origin feature/unit-tests
+
+# =============================================================================
+# ALIASES FOR EFFICIENCY
+# =============================================================================
+
+# Set up useful git aliases
+git config --global alias.co checkout
+git config --global alias.br branch
+git config --global alias.ci commit
+git config --global alias.st status
+git config --global alias.unstage 'reset HEAD --'
+git config --global alias.last 'log -1 HEAD'
+git config --global alias.visual '!gitk'
+git config --global alias.lg "log --oneline --graph --decorate --all"
+git config --global alias.sw switch
+
+# =============================================================================
+# CLEANUP AND MAINTENANCE
+# =============================================================================
+
+# Clean untracked files (dry run first)
+git clean -n
+git clean -f  # Actually remove untracked files
+
+# Garbage collection and optimization
+git gc
+git gc --aggressive
+
+# Show repository size and statistics
+git count-objects -v
+
+# =============================================================================
+# FINAL OPERATIONS
+# =============================================================================
+
+# Create final release
+git switch main
+echo "__version__ = '1.0.0'" > version.py
+git add version.py
+git commit -m "Add version file for release v1.0.0"
+
+# Create and push final tag
+git tag -a v1.0.0-final -m "Final release version 1.0.0"
+git push origin v1.0.0-final
+
+# Show final project status
+git status
+git log --oneline -10
+git branch -a
+
+echo "Git workflow demonstration complete!"
+echo "Repository is ready for production deployment."
