@@ -1,0 +1,71 @@
+** Ways to create a DataFrame in Spark 3.5+
+
+From RDD
+
+rdd = sc.parallelize(data)
+df = rdd.toDF(["col1","col2"])
+
+
+From local collections (list, array, dict)
+
+df = spark.createDataFrame([(1,"Ram"),(2,"Kumar")], ["id","name"])
+
+
+From external files (CSV, JSON, Parquet, ORC, Avro, Delta)
+
+df = spark.read.csv("/path/file.csv")
+
+
+From Hive / catalog tables / SQL queries
+
+df = spark.table("db.table")
+df = spark.sql("SELECT * FROM db.table")
+
+
+From Pandas / pandas-on-Spark
+
+import pandas as pd
+pdf = pd.DataFrame({"id":[1,2],"name":["Ram","Kumar"]})
+df = spark.createDataFrame(pdf)
+
+import pyspark.pandas as ps
+psdf = ps.DataFrame(pdf)
+
+
+From synthetic ranges
+
+df = spark.range(1,10)
+
+
+From streaming sources (Kafka, Auto Loader)
+
+df = spark.readStream.format("kafka").option(...).load()
+df = spark.readStream.format("cloudFiles").option(...).load()
+
+
+
+
+
+
+** Ways to change the number of partitions
+
+While creating from RDD
+
+rdd = sc.parallelize(data, numSlices=4)
+df = rdd.toDF()
+
+
+Repartition (shuffle, can increase or decrease partitions)
+
+df2 = df.repartition(4)
+df2 = df.repartition(4, "col")  # partition by column
+
+
+Coalesce (reduce partitions without full shuffle)
+
+df2 = df.coalesce(2)
+
+
+While reading files
+
+df = spark.read.csv("/path/file.csv").repartition(8)
