@@ -7,6 +7,7 @@ docker logs <container-id>
 
 localhost:8888 # jupyter notebook
 localhost:8080 # spark master
+localhost:4040
 
 #pyspark
 
