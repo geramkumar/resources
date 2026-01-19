@@ -1,0 +1,133 @@
+services:
+
+  spark-master:
+    image: jupyter/pyspark-notebook:x86_64-spark-3.5.0
+    container_name: spark-master
+    hostname: spark-master
+    user: root
+    command: >
+      bash -c "/usr/local/spark/sbin/start-master.sh &
+              start-notebook.sh --NotebookApp.token=''"
+    environment:
+      - SPARK_MODE=master
+      - SPARK_MASTER_HOST=spark-master
+      - SPARK_MASTER_PORT=7077
+      - SPARK_MASTER_WEBUI_PORT=8080
+      - PYSPARK_PYTHON=python3
+      - PYSPARK_DRIVER_PYTHON=python3
+    ports:
+      - "7077:7077"
+      - "8080:8080"
+    networks:
+      - spark-net
+
+  spark-worker-1:
+    image: jupyter/pyspark-notebook:x86_64-spark-3.5.0
+    container_name: spark-worker-1
+    hostname: spark-worker-1
+    user: root
+    command: >
+      bash -c "start-notebook.sh --NotebookApp.token='' &
+               /usr/local/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077"
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_WORKER_CORES=1
+      - SPARK_WORKER_MEMORY=2g
+      - PYSPARK_PYTHON=python3
+      - PYSPARK_DRIVER_PYTHON=python3
+    depends_on:
+      - spark-master
+    volumes:
+      - ./data:/home/jovyan/data
+    networks:
+      - spark-net
+
+  spark-worker-2:
+    image: jupyter/pyspark-notebook:x86_64-spark-3.5.0
+    container_name: spark-worker-2
+    hostname: spark-worker-2
+    user: root
+    command: >
+      bash -c "start-notebook.sh --NotebookApp.token='' &
+               /usr/local/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077"
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_WORKER_CORES=1
+      - SPARK_WORKER_MEMORY=2g
+      - PYSPARK_PYTHON=python3
+      - PYSPARK_DRIVER_PYTHON=python3
+    depends_on:
+      - spark-master
+    volumes:
+      - ./data:/home/jovyan/data
+    networks:
+      - spark-net
+
+  jupyter:
+    image: jupyter/pyspark-notebook:x86_64-spark-3.5.0
+    container_name: jupyter
+    hostname: jupyter
+    environment:
+      - PYSPARK_MASTER=spark://spark-master:7077
+      - PYSPARK_PYTHON=python3
+      - PYSPARK_DRIVER_PYTHON=python3
+    ports:
+      - "8888:8888"
+      - "4040:4040"
+    depends_on:
+      - spark-master
+      - spark-worker-1
+      - spark-worker-2
+    volumes:
+      - ./data:/home/jovyan/data
+    networks:
+      - spark-net
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - spark-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+    networks:
+      - spark-net
+
+  kafka-producer:
+      image: python:3.10
+      container_name: kafka-producer
+      depends_on:
+        - kafka
+      volumes:
+        - ./producer.py:/producer.py
+      command: >
+        bash -c "
+        sleep 15 &&
+        pip install kafka-python &&
+        python /producer.py
+        "
+      networks:
+        - spark-net
+
+networks:
+  spark-net:
+    driver: bridge
