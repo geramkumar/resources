@@ -1,0 +1,8 @@
+
+As someone who has actively driven cost optimization initiatives and worked closely with both application and platform teams on performance and cost efficiency, I can confidently share the following observations:
+
+The value provided by xx is relatively limited when compared to the depth of expertise our organization already possesses, particularly in Databricks cost optimization, performance tuning, and the use of built-in dashboards and insights.
+
+While xx is effective at identifying certain code-level inefficiencies, many of its recommendations do not fully align with our organization’s established best practices and, in several cases, are not compelling enough to drive actionable changes from application teams.
+
+The tool’s cost-saving claims are primarily based on extrapolation from relatively small savings, which did not reflect in the overall monthly billing.
