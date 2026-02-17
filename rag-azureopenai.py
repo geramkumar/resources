@@ -67,7 +67,7 @@ vectorstore = Chroma.from_documents(
 #below doesn't do : Augmentation (prompt stuffing), Generation (LLM answer), Reasoning,Hallucination control, End-to-end RAG
 
 query = "What is python?"
-similar_docs = vectorstore.similarity_search(query, k=3)
+similar_docs = vectorstore.similarity_search_with_score(query, k=3)
 similar_docs
 
 retriever = vectorstore.as_retriever(
