@@ -85,8 +85,17 @@ retriever = vectorstore.as_retriever(
 llm = AzureChatOpenAI(
     azure_deployment="gpt-4o-mini",   # chat model deployment name
     api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
-    temperature=0
+    temperature=0,
+    max_tokens=500 #totatl tokens it can generate
 )
+
+#other ways to create llm
+#from langchain.chat_models.base import init_chat_model
+#llm=init_chat_model("groq:")
+#llm=init_chat_model("openai:gpt-3.5-turbo")
+
+res = llm.invoke("What is Agentic AI")
+print(res)
 
 # ---------------------------
 # 6. Prompt Template
