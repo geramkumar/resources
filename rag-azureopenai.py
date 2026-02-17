@@ -66,6 +66,10 @@ vectorstore = Chroma.from_documents(
 #such as cosine similarity. LLMs are not in scope.
 #below doesn't do : Augmentation (prompt stuffing), Generation (LLM answer), Reasoning,Hallucination control, End-to-end RAG
 
+#Cromadb uses L2 distance (Euclidean distance) algorithm.
+#Here loweer the score is (ex: 0.01243) the content is more similar. 0 is very good. range can be 1 or 2 or higher
+#but in Cosine similarity, range is between 1-1 to 1. 1 -> exact match, 0 -> No match, -1 -> opposite
+
 query = "What is python?"
 similar_docs = vectorstore.similarity_search_with_score(query, k=3)
 similar_docs
