@@ -61,6 +61,15 @@ vectorstore = Chroma.from_documents(
     persist_directory="./chroma_db"
 )
 
+#below vectorstore.similarity_search command can't be considered as RAG. 
+#because the below command calls only the embedding model and uses similarity search algorithms
+#such as cosine similarity. LLMs are not in scope.
+#below doesn't do : Augmentation (prompt stuffing), Generation (LLM answer), Reasoning,Hallucination control, End-to-end RAG
+
+query = "What is python?"
+similar_docs = vectorstore.similarity_search(query, k=3)
+similar_docs
+
 retriever = vectorstore.as_retriever(
     search_type="similarity",
     search_kwargs={"k": 3}
