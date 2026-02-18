@@ -144,6 +144,10 @@ rag_chain = create_retrieval_chain(
 # ---------------------------
 # 9. Query
 # ---------------------------
+
+#The embedding of the input query is done implicitly by the retriever, which in turn calls the vector store, 
+#which uses the embedding function you registered earlier.
+
 query = "What is explained in the document?"
 response = rag_chain.invoke({"input": query})
 
