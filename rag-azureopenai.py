@@ -131,8 +131,17 @@ rag_chain = create_retrieval_chain(
 # 9. Query
 # ---------------------------
 query = "What is explained in the document?"
-
 response = rag_chain.invoke({"input": query})
 
 print("\n--- ANSWER ---")
 print(response["answer"])
+
+
+
+
+
+### Same is refactored into Enterprise grade solution
+# unzip azure_openai_rag_enterprise.zip
+# cd azure-openai-rag-enterprise
+# uv sync
+# python src/main.py
