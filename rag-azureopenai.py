@@ -70,14 +70,19 @@ vectorstore = Chroma.from_documents(
 #Here loweer the score is (ex: 0.01243) the content is more similar. 0 is very good. range can be 1 or 2 or higher
 #but in Cosine similarity, range is between 1-1 to 1. 1 -> exact match, 0 -> No match, -1 -> opposite
 
+
 query = "What is python?"
 similar_docs = vectorstore.similarity_search_with_score(query, k=3)
 similar_docs
+
+### note: input from rag_chain.invoke will be passed as an input query to the below retriver.
+### response = rag_chain.invoke({"input": query})
 
 retriever = vectorstore.as_retriever(
     search_type="similarity",
     search_kwargs={"k": 3}
 )
+
 
 # ---------------------------
 # 5. Azure OpenAI LLM
@@ -122,10 +127,19 @@ document_chain = create_stuff_documents_chain(
 # ---------------------------
 # 8. RAG Retrieval Chain
 # ---------------------------
+
+# The {input} and {context} are implicitly injected by LangChain’s create_retrieval_chain(), which:
+# Calls the retriever automatically
+# Collects retrieved documents
+# Maps them to {context}
+# Passes your query as {input}
+# Calls the LLM with the final stuffed prompt
+
 rag_chain = create_retrieval_chain(
     retriever=retriever,
     combine_docs_chain=document_chain
 )
+
 
 # ---------------------------
 # 9. Query
