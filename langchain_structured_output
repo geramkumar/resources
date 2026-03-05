@@ -1,0 +1,249 @@
+sales_data.csv
+
+sales_person,city,month,sales_amount,product
+Rahul Sharma,Pune,Jan-26,12000,Laptop
+Rahul Sharma,Pune,Feb-26,15000,Laptop
+Rahul Sharma,Pune,Mar-26,18000,Tablet
+Priya Patel,Mumbai,Jan-26,20000,Phone
+Priya Patel,Mumbai,Feb-26,22000,Phone
+Priya Patel,Mumbai,Mar-26,21000,Tablet
+Amit Kumar,Bangalore,Jan-26,25000,Laptop
+Amit Kumar,Bangalore,Feb-26,26000,Tablet
+Amit Kumar,Bangalore,Mar-26,27000,Phone
+Neha Singh,Hyderabad,Jan-26,16000,Tablet
+Neha Singh,Hyderabad,Feb-26,17000,Phone
+Neha Singh,Hyderabad,Mar-26,19000,Laptop
+
+
+###############
+
+# ==========================================================
+# LangChain Structured Output Demonstration
+# Concepts:
+# 1. Pydantic Structured Output
+# 2. TypedDict Structured Output
+# 3. Dataclass Structured Output
+# Dataset: Sales CSV
+# ==========================================================
+
+# pip install langchain langchain-openai langchain-community faiss-cpu pandas pydantic
+
+import pandas as pd
+from typing import List, TypedDict
+from dataclasses import dataclass
+from pydantic import BaseModel, Field
+
+from langchain.schema import Document
+from langchain_openai import AzureOpenAIEmbeddings, AzureChatOpenAI
+from langchain_community.vectorstores import FAISS
+
+
+# ==========================================================
+# 1. Azure OpenAI Configuration
+# ==========================================================
+
+AZURE_ENDPOINT = "YOUR_ENDPOINT"
+AZURE_API_KEY = "YOUR_KEY"
+API_VERSION = "2024-02-15-preview"
+
+EMBEDDING_MODEL = "text-embedding-3-small"
+CHAT_DEPLOYMENT = "gpt-4o-mini"
+
+
+# ==========================================================
+# 2. Load Sales CSV
+# ==========================================================
+
+df = pd.read_csv("sales_data.csv")
+
+print("\n======================")
+print("SALES DATA")
+print("======================")
+print(df)
+
+
+# ==========================================================
+# 3. Convert CSV rows to Documents
+# ==========================================================
+
+documents = []
+
+for _, row in df.iterrows():
+
+    text = f"""
+    Sales Person: {row['sales_person']}
+    City: {row['city']}
+    Month: {row['month']}
+    Product: {row['product']}
+    Sales Amount: {row['sales_amount']}
+    """
+
+    documents.append(Document(page_content=text))
+
+
+print("\n======================")
+print("Sample Documents")
+print("======================")
+
+for d in documents[:3]:
+    print(d.page_content)
+
+
+# ==========================================================
+# 4. Create Embedding Model
+# ==========================================================
+
+embeddings = AzureOpenAIEmbeddings(
+    azure_endpoint=AZURE_ENDPOINT,
+    api_key=AZURE_API_KEY,
+    api_version=API_VERSION,
+    model=EMBEDDING_MODEL
+)
+
+print("\nEmbedding model initialized")
+
+
+# ==========================================================
+# 5. Create Vector Store
+# ==========================================================
+
+vectorstore = FAISS.from_documents(documents, embeddings)
+
+print("\nVector store created")
+
+
+# ==========================================================
+# 6. Chat Model
+# ==========================================================
+
+llm = AzureChatOpenAI(
+    azure_endpoint=AZURE_ENDPOINT,
+    api_key=AZURE_API_KEY,
+    api_version=API_VERSION,
+    deployment_name=CHAT_DEPLOYMENT,
+    temperature=0
+)
+
+print("\nChat model initialized")
+
+
+# ==========================================================
+# 7. Query + Retrieval
+# ==========================================================
+
+query = "Show sales details for Rahul Sharma"
+
+print("\nUser Query:", query)
+
+retrieved_docs = vectorstore.similarity_search(query, k=3)
+
+context = ""
+
+print("\n======================")
+print("Retrieved Records")
+print("======================")
+
+for d in retrieved_docs:
+    print(d.page_content)
+    context += d.page_content + "\n"
+
+
+# ==========================================================
+# 8. Structured Output with PYDANTIC
+# ==========================================================
+
+class SalesRowPydantic(BaseModel):
+
+    sales_person: str = Field(description="Sales person name")
+    city: str
+    month: str
+    product: str
+    sales_amount: int
+
+
+class SalesTablePydantic(BaseModel):
+
+    rows: List[SalesRowPydantic]
+
+
+structured_llm_pydantic = llm.with_structured_output(SalesTablePydantic)
+
+result_pydantic = structured_llm_pydantic.invoke(
+    f"Extract structured sales records from context:\n{context}"
+)
+
+print("\n======================")
+print("Structured Output (Pydantic)")
+print("======================")
+
+for r in result_pydantic.rows:
+
+    print(r)
+
+
+# ==========================================================
+# 9. Structured Output with TYPEDDICT
+# ==========================================================
+
+class SalesRowTypedDict(TypedDict):
+
+    sales_person: str
+    city: str
+    month: str
+    product: str
+    sales_amount: int
+
+
+class SalesTableTypedDict(TypedDict):
+
+    rows: List[SalesRowTypedDict]
+
+
+structured_llm_typed = llm.with_structured_output(SalesTableTypedDict)
+
+result_typed = structured_llm_typed.invoke(
+    f"Extract structured sales records from context:\n{context}"
+)
+
+print("\n======================")
+print("Structured Output (TypedDict)")
+print("======================")
+
+for r in result_typed["rows"]:
+
+    print(r)
+
+
+# ==========================================================
+# 10. Structured Output with DATACLASS
+# ==========================================================
+
+@dataclass
+class SalesRowDataClass:
+
+    sales_person: str
+    city: str
+    month: str
+    product: str
+    sales_amount: int
+
+
+@dataclass
+class SalesTableDataClass:
+
+    rows: List[SalesRowDataClass]
+
+
+structured_llm_dataclass = llm.with_structured_output(SalesTableDataClass)
+
+result_dataclass = structured_llm_dataclass.invoke(
+    f"Extract structured sales records from context:\n{context}"
+)
+
+print("\n======================")
+print("Structured Output (Dataclass)")
+print("======================")
+
+for r in result_dataclass.rows:
+
+    print(r)
