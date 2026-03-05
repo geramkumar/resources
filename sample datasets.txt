@@ -1,0 +1,159 @@
+## Sales sample data
+sales_person,city,month,sales_amount
+Amit Sharma,Pune,Jan'26,45000
+Rohit Verma,Mumbai,Jan'26,72000
+Sneha Iyer,Bangalore,Jan'26,39000
+Rahul Nair,Hyderabad,Jan'26,88000
+Priya Kulkarni,Pune,Jan'26,54000
+Ankit Gupta,Mumbai,Jan'26,61000
+Neha Reddy,Hyderabad,Jan'26,73000
+Vikas Singh,Bangalore,Jan'26,47000
+Pooja Mehta,Pune,Jan'26,95000
+Arjun Patil,Mumbai,Jan'26,36000
+Kiran Joshi,Hyderabad,Jan'26,42000
+Deepak Yadav,Bangalore,Jan'26,87000
+Meera Nair,Pune,Jan'26,56000
+Sanjay Shah,Mumbai,Jan'26,69000
+Divya Menon,Bangalore,Jan'26,33000
+Karthik Reddy,Hyderabad,Jan'26,91000
+Amit Sharma,Pune,Feb'26,52000
+Rohit Verma,Mumbai,Feb'26,64000
+Sneha Iyer,Bangalore,Feb'26,41000
+Rahul Nair,Hyderabad,Feb'26,76000
+Priya Kulkarni,Pune,Feb'26,48000
+Ankit Gupta,Mumbai,Feb'26,72000
+Neha Reddy,Hyderabad,Feb'26,69000
+Vikas Singh,Bangalore,Feb'26,53000
+Pooja Mehta,Pune,Feb'26,87000
+Arjun Patil,Mumbai,Feb'26,34000
+Kiran Joshi,Hyderabad,Feb'26,45000
+Deepak Yadav,Bangalore,Feb'26,81000
+Meera Nair,Pune,Feb'26,60000
+Sanjay Shah,Mumbai,Feb'26,67000
+Divya Menon,Bangalore,Feb'26,39000
+Karthik Reddy,Hyderabad,Feb'26,93000
+Amit Sharma,Pune,Mar'26,61000
+Rohit Verma,Mumbai,Mar'26,70000
+Sneha Iyer,Bangalore,Mar'26,44000
+Rahul Nair,Hyderabad,Mar'26,82000
+Priya Kulkarni,Pune,Mar'26,56000
+Ankit Gupta,Mumbai,Mar'26,73000
+Neha Reddy,Hyderabad,Mar'26,77000
+Vikas Singh,Bangalore,Mar'26,49000
+Pooja Mehta,Pune,Mar'26,91000
+Arjun Patil,Mumbai,Mar'26,38000
+Kiran Joshi,Hyderabad,Mar'26,47000
+Deepak Yadav,Bangalore,Mar'26,86000
+Meera Nair,Pune,Mar'26,62000
+Sanjay Shah,Mumbai,Mar'26,71000
+Divya Menon,Bangalore,Mar'26,41000
+Karthik Reddy,Hyderabad,Mar'26,97000
+Amit Sharma,Pune,Mar'26,58000
+Rohit Verma,Mumbai,Feb'26,66000
+
+#=================================
+
+# ============================================================
+# 1. Create Sample Dataset (LangChain related + unrelated)
+# ============================================================
+
+related_content = [
+"LangChain is a framework used to build applications powered by large language models.",
+"LangChain supports building RAG pipelines using retrievers and vector databases.",
+"Document loaders in LangChain help ingest data from PDFs, websites, and text files.",
+"LangChain text splitters divide large documents into smaller chunks for embedding.",
+"Vector databases like FAISS and Chroma are commonly used in LangChain for similarity search.",
+"Embeddings convert text into numerical vectors for semantic search.",
+"Retrievers in LangChain fetch relevant documents based on a query.",
+"LangChain chains allow developers to combine LLM calls and tools together.",
+"Hybrid search combines semantic similarity and keyword matching.",
+"LangChain supports integrations with OpenAI, Azure OpenAI, and HuggingFace models.",
+"BM25Retriever enables keyword based search in LangChain.",
+"EnsembleRetriever allows combining multiple retrieval strategies.",
+"RAG stands for Retrieval Augmented Generation.",
+"Cosine similarity measures semantic closeness between vectors.",
+"Vector stores allow efficient nearest neighbor search for embeddings."
+]
+
+unrelated_content = [
+"Cricket is one of the most popular sports played in India.",
+"Cooking pasta requires boiling water and adding salt.",
+"The Taj Mahal is located in Agra and attracts millions of tourists.",
+"Yoga improves flexibility and reduces stress.",
+"Many people enjoy traveling to hill stations during summer.",
+"Walking daily improves cardiovascular health.",
+"Gardening is a relaxing hobby for many people.",
+"Reading books regularly improves vocabulary and knowledge.",
+"Music helps people relax and improve their mood.",
+"Baking bread requires flour, yeast, and patience.",
+"Football is widely played in Europe and South America.",
+"Green tea is believed to improve metabolism.",
+"Watching movies is a popular weekend activity.",
+"The Himalayas are the highest mountain range in the world.",
+"Swimming is a good full body exercise."
+]
+
+
+#----------------------------------------------------------------------------------------------------
+# -----------------------------------------------------------
+# Generate sample dataset for Hybrid Search practice
+# (Dense embedding search + Sparse keyword search)
+# -----------------------------------------------------------
+
+import random
+
+# Related content (Data Engineering / Databricks)
+related_content = [
+"Azure Databricks is a unified analytics platform built on Apache Spark.",
+"Delta Lake provides ACID transactions on top of data lakes.",
+"Medallion architecture organizes data into Bronze, Silver, and Gold layers.",
+"Spark uses distributed computing to process large scale data efficiently.",
+"PySpark allows developers to write Spark jobs using Python.",
+"Delta tables support schema evolution and time travel features.",
+"Azure Data Factory is used for orchestrating ETL pipelines.",
+"Databricks notebooks support Python, SQL, Scala, and R.",
+"Spark transformations are lazy and executed only when an action is triggered.",
+"Partitioning and caching improve Spark performance.",
+"Broadcast joins improve performance when joining large and small tables.",
+"Delta Live Tables simplifies pipeline development in Databricks.",
+"Spark uses DAG execution to optimize query plans.",
+"Adaptive Query Execution dynamically optimizes Spark queries.",
+"Structured Streaming processes real-time data streams in Spark."
+]
+
+# Unrelated content
+unrelated_content = [
+"Cricket is one of the most popular sports in India.",
+"The Taj Mahal is located in Agra and is a UNESCO world heritage site.",
+"Cooking pasta requires boiling water and adding salt.",
+"Morning exercise improves overall physical health.",
+"Traveling to the mountains during winter can be refreshing.",
+"Yoga helps improve flexibility and mental balance.",
+"Many people enjoy watching movies during weekends.",
+"Green tea is considered beneficial for metabolism.",
+"Reading books regularly improves vocabulary.",
+"Gardening is a relaxing hobby for many people.",
+"The history of India includes the Maurya and Gupta empires.",
+"Football is widely played across Europe and South America.",
+"Baking bread requires flour, yeast, water, and patience.",
+"Walking 10,000 steps daily is considered good for health.",
+"Music can improve mood and reduce stress."
+]
+
+# Combine and shuffle
+dataset = related_content + unrelated_content
+random.shuffle(dataset)
+
+# Write to text file
+file_path = "hybrid_search_sample_data.txt"
+
+with open(file_path, "w", encoding="utf-8") as f:
+    for i, line in enumerate(dataset):
+        f.write(f"Document {i+1}: {line}\n")
+
+print("Sample dataset created:", file_path)
+print("Total documents:", len(dataset))
+
+===================================
+
+
