@@ -30,6 +30,10 @@ chat_chain = RunnableWithMessageHistory(
     # STEP 1 — RETRIEVE HISTORY OBJECT
     # LangChain will call this before executing the chain
     lambda session_id: store.setdefault(session_id, ChatMessageHistory()),
+    #If sessionid already has memory → reuse it
+    #Else → create a new ChatMessageHistory and store it
+
+    
     input_messages_key="question",
     # STEP 2 — HISTORY WILL BE INSERTED INTO THIS PROMPT VARIABLE
     history_messages_key="history"
@@ -42,6 +46,14 @@ history = get_history(session_id)
 history.add_user_message(user_input)
 response = chain.invoke(...)
 history.add_ai_message(response)
+
+
+NOTE: Simple version without memory storage/retrival:
+lambda session_id: ChatMessageHistory()
+
+#it gathers, stores the data only for one invocation which will be lost in the second invocation meaning it has the ability to store and manage the history 
+#but it doesn't.
+
 
 '''
 
