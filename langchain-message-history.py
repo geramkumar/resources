@@ -1,3 +1,50 @@
+'''
+Notes:
+
+RunnableWithMessageHistory is a LangChain tool that acts as a "memory manager" for chatbots. 
+RunnableWithMessageHistory
+       |
+       |---- load history
+       |
+       |---- run chain
+       |
+       |---- save messages
+
+Workflow:
+========
+User Input
+     ↓
+RunnableWithMessageHistory
+     ↓
+get_history(session_id)
+     ↓
+Inject history into prompt
+     ↓
+Run chain (prompt → llm → parser)
+     ↓
+Save Human + AI messages
+
+
+chat_chain = RunnableWithMessageHistory(
+   memory_chain,
+    # STEP 1 — RETRIEVE HISTORY OBJECT
+    # LangChain will call this before executing the chain
+    lambda session_id: store.setdefault(session_id, ChatMessageHistory()),
+    input_messages_key="question",
+    # STEP 2 — HISTORY WILL BE INSERTED INTO THIS PROMPT VARIABLE
+    history_messages_key="history"
+)
+
+IMPORTANT RunnableWithMessageHistory implictly performs the following:
+- add the user question in history and add llm response (AImessage) in history
+
+history = get_history(session_id)
+history.add_user_message(user_input)
+response = chain.invoke(...)
+history.add_ai_message(response)
+
+'''
+
 #####################################################################
 # 1. IMPORT LIBRARIES
 #####################################################################
