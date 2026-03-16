@@ -1,0 +1,349 @@
+| #  | Break Type                    | Example                                                                          | Typical %  | Reason (10+ words)                                                                                                                                                                         | Solution (10+ words)                                                                                                                                                              |
+| -- | ----------------------------- | -------------------------------------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1  | Reference mismatch            | Internal ref **TXN458921**, SWIFT ref **ABC77821**, amounts identical            | **25–30%** | Different systems generate different transaction identifiers and SWIFT references, causing automated reconciliation rules to fail even though the transactions represent the same payment. | Implement composite attribute matching using amount, currency and value date, and normalize reference formats before running reconciliation matching rules.                       |
+| 2  | Missing transaction           | Internal system shows **TXN1001 $5,000**, but SWIFT or settlement record missing | **18–22%** | Payment message may not be transmitted through SWIFT or settlement file ingestion failed due to interface outage, message queue error or batch job failure.                                | Introduce automated monitoring of data feeds and message queues, and automatically reprocess or resend transactions when missing records are detected.                            |
+| 3  | Amount difference             | Internal **$10,000**, bank statement **$9,990**                                  | **12–15%** | Correspondent bank fees, FX conversion differences or rounding adjustments modify the settlement amount compared to the original payment instruction.                                      | Configure tolerance-based matching rules allowing minor differences, capture expected bank charges explicitly, and adjust reconciliation rules to consider settlement deductions. |
+| 4  | Timing difference             | Internal posting **16 Mar**, statement posting **17 Mar**                        | **8–12%**  | Payment posted immediately in internal system but appears later in settlement files due to clearing cycle delays, batch processing schedules or time zone differences.                     | Allow date tolerance windows in reconciliation rules and schedule reconciliation runs after settlement cycles complete to minimize temporary timing breaks.                       |
+| 5  | Net vs gross settlement       | Internal payments **100 + 200 + 300**, statement shows **600 settlement**        | **6–10%**  | Clearing networks often aggregate multiple individual payments into one settlement entry, which prevents direct one-to-one transaction matching during reconciliation.                     | Configure many-to-one reconciliation rules that group internal transactions using settlement identifiers and compare them against aggregated settlement entries.                  |
+| 6  | Partial settlement            | Internal **$8,000**, statement shows **$5,000 + $3,000**                         | **4–7%**   | Liquidity constraints, intermediary processing rules or clearing system policies cause payments to be settled in multiple parts across settlement cycles.                                  | Enable one-to-many reconciliation rules that combine multiple settlement entries with one internal transaction using transaction linkage identifiers.                             |
+| 7  | Duplicate transaction         | Internal shows **TXN1004 twice**, statement shows once                           | **3–6%**   | Retry logic, system recovery processes or duplicate file ingestion may create repeated transaction records within payment or reconciliation systems.                                       | Implement duplicate detection logic using transaction identifiers and timestamps and enforce idempotency checks within upstream payment processing workflows.                     |
+| 8  | Interface / ETL failure       | Settlement file exists but not loaded into reconciliation system                 | **3–5%**   | Data ingestion pipeline failures such as API issues, file transfer interruptions or parsing errors prevent reconciliation system from receiving required transaction data.                 | Introduce automated job monitoring, retry mechanisms and ingestion audit logs to ensure transaction data is reliably delivered into reconciliation systems.                       |
+| 9  | Counterparty processing issue | Payment sent but receiving bank reports **beneficiary account invalid**          | **2–4%**   | Receiving bank may reject or delay transaction due to compliance checks, invalid account details or sanctions screening requirements.                                                      | Validate beneficiary details before payment initiation and initiate counterparty investigation using SWIFT inquiry messages when settlement confirmation is missing.              |
+| 10 | Data mapping / format error   | Internal reference **TXN123456789**, external truncated to **TXN123456**         | **1–3%**   | Incorrect interface mapping or inconsistent data formats across systems lead to truncated references or missing fields that break reconciliation matching logic.                           | Correct upstream field mappings, standardize transaction data formats across systems and introduce validation checks during reconciliation data ingestion.                        |
+
+
+
+
+
+Below are the common reconciliation break scenarios, along with possible reasons and potential solutions.
+These examples reflect how Ops teams typically handle breaks in systems like Clareti Transaction Control, often involving confirmations exchanged through SWIFT.
+
+1. Missing Transaction
+
+Example
+
+| System   | Ref     | Amount |
+| -------- | ------- | ------ |
+| Internal | TXN1001 | $5,000 |
+| External | —       | —      |
+
+
+Possible Reasons
+
+SWIFT message not sent
+
+File ingestion failure
+
+Upstream system outage
+
+Payment stuck in gateway
+
+Potential Solutions
+
+Check message queue / gateway logs
+
+Re-send payment message
+
+Reprocess missing file
+
+Implement monitoring alerts for missing feeds
+
+2. Reference Mismatch
+
+Example
+
+| Internal Ref | External Ref | Amount |
+| ------------ | ------------ | ------ |
+| TXN1002      | ABC77821     | $3,000 |
+
+
+Possible Reasons
+
+Different systems generate different references
+
+Field truncation during message transmission
+
+Wrong field mapping during ETL
+
+Intermediary bank replaced reference
+
+Potential Solutions
+
+Use composite matching keys (amount + date + currency)
+
+Map internal reference to SWIFT reference field
+
+Normalize reference formats (remove special characters)
+
+Improve interface mappings
+
+3. Amount Difference
+
+Example
+
+| System    | Amount  |
+| --------- | ------- |
+| Internal  | $10,000 |
+| Statement | $9,990  |
+
+
+Possible Reasons
+
+Correspondent bank fee
+
+FX conversion difference
+
+Rounding differences
+
+Partial settlement
+
+Potential Solutions
+
+Configure tolerance matching rules
+
+Record fee entries separately
+
+Capture FX rate information in reconciliation data
+
+Enhance reconciliation rule logic
+
+4. Timing Difference
+
+Example
+
+| System    | Date   |
+| --------- | ------ |
+| Internal  | 16 Mar |
+| Statement | 17 Mar |
+
+
+Possible Reasons
+
+Settlement processed next day
+
+Batch processing delays
+
+Time zone differences
+
+Clearing cycle timing
+
+Potential Solutions
+
+Allow date tolerance window (±1 day)
+
+Align batch schedules across systems
+
+Run reconciliation after settlement window closes
+
+5. Duplicate Transaction
+
+Example
+
+| Ref     | Amount |
+| ------- | ------ |
+| TXN1004 | $2,000 |
+| TXN1004 | $2,000 |
+
+
+Possible Reasons
+
+Retry mechanism resending message
+
+System replay during failure recovery
+
+Duplicate file processing
+
+Potential Solutions
+
+Implement duplicate detection rules
+
+Use unique transaction identifiers
+
+Add idempotency checks in processing systems
+
+6. Net vs Gross Settlement
+
+Example
+
+Internal
+
+| Ref     | Amount |
+| ------- | ------ |
+| TXN2001 | $100   |
+| TXN2002 | $200   |
+| TXN2003 | $300   |
+
+
+Statement
+
+| Settlement | Amount |
+| ---------- | ------ |
+| SETTLE01   | $600   |
+
+
+Possible Reasons
+
+Clearing system performs net settlement
+
+Payment network aggregates transactions
+
+Potential Solutions
+
+Configure many-to-one reconciliation rules
+
+Capture settlement batch IDs
+
+Use grouping rules in reconciliation engine
+
+7. Partial Settlement
+
+Example
+
+Internal
+
+| Ref     | Amount |
+| ------- | ------ |
+| TXN3001 | $8,000 |
+
+
+Statement
+
+Ref	Amount
+| Ref      | Amount |
+| -------- | ------ |
+| TXN3001A | $5,000 |
+| TXN3001B | $3,000 |
+
+
+Possible Reasons
+
+Liquidity limits
+
+Payment split across settlement cycles
+
+Clearing house partial processing
+
+Potential Solutions
+
+Enable one-to-many matching rules
+
+Capture parent transaction ID
+
+Improve settlement reporting
+
+8. System / Interface Failure
+
+Example
+
+| Internal | External |
+| -------- | -------- |
+| TXN4001  | Missing  |
+
+
+Possible Reasons
+
+File transfer failure
+
+ETL job failure
+
+API integration issue
+
+Data parsing error
+
+Potential Solutions
+
+Add automated job monitoring
+
+Implement retry mechanisms
+
+Maintain reconciliation feed audit logs
+
+Alert Ops team for ingestion failures
+
+9. Counterparty Investigation
+
+Example
+
+| Internal | Status |
+| -------- | ------ |
+| TXN5001  | Sent   |
+
+
+External bank reports no credit.
+
+Possible Reasons
+
+Incorrect beneficiary account
+
+Compliance hold
+
+Payment rejected by receiving bank
+
+Sanctions screening issue
+
+Potential Solutions
+
+Contact counterparty bank via SWIFT inquiry
+
+Correct beneficiary details
+
+Reprocess payment
+
+Update payment validation rules
+
+10. Root Cause Analysis (RCA)
+
+After resolving breaks, Ops teams classify the cause.
+
+Possible Reasons Categories
+
+Data mapping issue
+
+Fee deduction
+
+Settlement timing difference
+
+Interface failure
+
+Counterparty rejection
+
+Potential Solutions
+
+Improve reconciliation rules
+
+Fix upstream data mapping
+
+Automate tolerance matching
+
+Implement monitoring dashboards
+
+Enhance upstream validations
+
+Simplified Break Resolution Flow
+Transaction ingestion
+        │
+        ▼
+Matching rule executed
+        │
+        ▼
+Break detected
+        │
+        ▼
+Ops investigation
+        │
+        ├─ Identify root cause
+        ├─ Apply manual matching / allocation
+        ├─ Contact counterparty if needed
+        └─ Record RCA
+        │
+        ▼
+Process improvement / rule update
+
+✅ Key Operational Insight
+
+In large banks:
+
+Metric	Typical Range
+Auto-matched transactions	95–98%
+Breaks requiring investigation	2–5%
+Breaks caused by data / timing issues	~70–80%
