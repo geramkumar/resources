@@ -1,0 +1,203 @@
+In bank reconciliation platforms such as Clareti Transaction Control, when a break is identified, the system (or operations team) performs several matching validations to determine whether the transactions actually correspond but failed the initial automated match.
+
+These validations usually fall into three major categories you mentioned: attribute-based, request/proposal-based, and procedural validations.
+
+1. Attribute-Based Matching Validation
+
+Definition
+
+Transactions are compared using transaction attributes (fields).
+
+If enough attributes match within defined rules, the break can be resolved.
+
+Typical attributes used
+
+Attribute	Example
+Transaction reference	TXN458921
+Amount	10,000
+Currency	USD
+Value date	16-Mar-2026
+Counterparty bank	Bank B
+Account number	Nostro account
+
+Example validation
+
+Amount = Amount
+AND Currency = Currency
+AND Value_Date ± 1 day
+
+This allows tolerance-based matching.
+
+Common types
+
+Exact match
+
+Tolerance match
+
+Composite key match
+
+Fuzzy reference match
+
+Attribute-based matching is the most common automated reconciliation method.
+
+2. Request / Proposal-Based Matching
+
+Definition
+
+The reconciliation system suggests possible matches when the initial rule fails.
+
+These suggestions are presented to the operations team, who can approve them.
+
+Example scenario:
+
+Internal system:
+
+Reference	Amount
+TXN1001	10,000
+
+External system:
+
+Reference	Amount
+ABC7782	10,000
+
+The system may propose:
+
+Possible match based on amount + date
+
+Operator action:
+
+Accept match
+
+Reject match
+
+Investigate further
+
+These are called match proposals.
+
+They are common in:
+
+Nostro reconciliation
+
+Securities reconciliation
+
+FX trade reconciliation
+
+3. Procedural Validation
+
+Definition
+
+These validations use business process rules rather than pure field comparison.
+
+The system checks whether the transaction behavior follows the expected lifecycle.
+
+Example rules:
+
+Process Rule	Example
+Payment must have SWIFT ACK	Check ACK received
+Trade must have settlement record	Verify clearing confirmation
+Debit must have corresponding credit	Check both sides exist
+
+Example:
+
+Payment initiated
+↓
+SWIFT message sent
+↓
+Settlement confirmation received
+
+If any step is missing → procedural break.
+
+4. Additional Matching Methods Used in Banks
+
+Beyond those three categories, reconciliation engines often apply these matching techniques.
+
+Exact Matching
+
+All key fields match exactly.
+
+Example:
+
+Reference = Reference
+Amount = Amount
+Currency = Currency
+Tolerance Matching
+
+Allows small differences.
+
+Example:
+
+Amount difference ≤ $1
+
+Used when:
+
+FX rounding occurs
+
+Fees deducted
+
+One-to-Many Matching
+
+Example:
+
+Internal	External
+$10,000	$6,000
+	$4,000
+
+System groups the external transactions.
+
+Many-to-One Matching
+
+Example:
+
+Internal
+$100
+$200
+$300
+
+External:
+
+Settlement
+$600
+Many-to-Many Matching
+
+Example:
+
+Internal	External
+$100	$250
+$200	$50
+
+Total amounts match.
+
+5. Simplified Break Resolution Flow
+Transaction ingestion
+        │
+        ▼
+Initial reconciliation rule
+        │
+        ├─ Match → Closed
+        │
+        ▼
+Break detected
+        │
+        ▼
+Attribute-based validation
+        │
+        ▼
+Proposal-based matching
+        │
+        ▼
+Procedural validation
+        │
+        ▼
+Manual investigation
+
+✅ Summary
+
+When a reconciliation break occurs, banks typically apply:
+
+Validation Type	Purpose
+Attribute-based validation	Compare transaction fields
+Request / proposal matching	Suggest possible matches
+Procedural validation	Check process lifecycle
+Exact matching	Direct field equality
+Tolerance matching	Allow minor differences
+1-to-many / many-to-many	Handle aggregated transactions
