@@ -1,0 +1,445 @@
+In bank reconciliation platforms such as Clareti Transaction Control, when a break is identified, the system (or operations team) performs several matching validations to determine whether the transactions actually correspond but failed the initial automated match.
+
+These validations usually fall into three major categories you mentioned: attribute-based, request/proposal-based, and procedural validations.
+
+1. Attribute-Based Matching Validation
+
+Definition
+
+Transactions are compared using transaction attributes (fields).
+
+If enough attributes match within defined rules, the break can be resolved.
+
+Typical attributes used
+
+Attribute	Example
+Transaction reference	TXN458921
+Amount	10,000
+Currency	USD
+Value date	16-Mar-2026
+Counterparty bank	Bank B
+Account number	Nostro account
+
+Example validation
+
+Amount = Amount
+AND Currency = Currency
+AND Value_Date ± 1 day
+
+This allows tolerance-based matching.
+
+Common types
+
+Exact match
+
+Tolerance match
+
+Composite key match
+
+Fuzzy reference match
+
+Attribute-based matching is the most common automated reconciliation method.
+
+2. Request / Proposal-Based Matching
+
+Definition
+
+The reconciliation system suggests possible matches when the initial rule fails.
+
+These suggestions are presented to the operations team, who can approve them.
+
+Example scenario:
+
+Internal system:
+
+Reference	Amount
+TXN1001	10,000
+
+External system:
+
+Reference	Amount
+ABC7782	10,000
+
+The system may propose:
+
+Possible match based on amount + date
+
+Operator action:
+
+Accept match
+
+Reject match
+
+Investigate further
+
+These are called match proposals.
+
+They are common in:
+
+Nostro reconciliation
+
+Securities reconciliation
+
+FX trade reconciliation
+
+3. Procedural Validation
+
+Definition
+
+These validations use business process rules rather than pure field comparison.
+
+The system checks whether the transaction behavior follows the expected lifecycle.
+
+Example rules:
+
+Process Rule	Example
+Payment must have SWIFT ACK	Check ACK received
+Trade must have settlement record	Verify clearing confirmation
+Debit must have corresponding credit	Check both sides exist
+
+Example:
+
+Payment initiated
+↓
+SWIFT message sent
+↓
+Settlement confirmation received
+
+If any step is missing → procedural break.
+
+4. Additional Matching Methods Used in Banks
+
+Beyond those three categories, reconciliation engines often apply these matching techniques.
+
+Exact Matching
+
+All key fields match exactly.
+
+Example:
+
+Reference = Reference
+Amount = Amount
+Currency = Currency
+Tolerance Matching
+
+Allows small differences.
+
+Example:
+
+Amount difference ≤ $1
+
+Used when:
+
+FX rounding occurs
+
+Fees deducted
+
+One-to-Many Matching
+
+Example:
+
+Internal	External
+$10,000	$6,000
+	$4,000
+
+System groups the external transactions.
+
+Many-to-One Matching
+
+Example:
+
+Internal
+$100
+$200
+$300
+
+External:
+
+Settlement
+$600
+Many-to-Many Matching
+
+Example:
+
+Internal	External
+$100	$250
+$200	$50
+
+Total amounts match.
+
+5. Simplified Break Resolution Flow
+Transaction ingestion
+        │
+        ▼
+Initial reconciliation rule
+        │
+        ├─ Match → Closed
+        │
+        ▼
+Break detected
+        │
+        ▼
+Attribute-based validation
+        │
+        ▼
+Proposal-based matching
+        │
+        ▼
+Procedural validation
+        │
+        ▼
+Manual investigation
+
+✅ Summary
+
+When a reconciliation break occurs, banks typically apply:
+
+| Method                         | Who Resolves              | Purpose                        |
+| ------------------------------ | ------------------------- | ------------------------------ |
+| Attribute based matching       | System                    | Match using transaction fields |
+| Investigation based matching   | Analyst                   | Manual decision                |
+| Request based matching         | System + analyst          | System suggests matches        |
+| Investigation based allocation | Analyst                   | Manually group transactions    |
+| Request based allocation       | System + analyst          | System suggests grouping       |
+| RCA                            | Operations / control team | Identify root cause            |
+
+
+
+=============================
+
+
+
+
+n reconciliation systems such as Clareti Transaction Control, the methods you listed are core operational workflows, but there are several additional matching techniques commonly used by banks that are often discussed at the matching engine level.
+
+Below are the most common ones that are usually considered in addition to the ones you mentioned.
+
+1. Exact Matching
+
+Definition
+
+Transactions match only when all key fields are identical.
+
+Typical fields:
+
+Reference
+
+Amount
+
+Currency
+
+Value date
+
+Example
+
+Internal	External
+Ref: ABC123	Ref: ABC123
+Amount: 10,000	Amount: 10,000
+
+Rule
+
+Reference = Reference
+AND Amount = Amount
+AND Currency = Currency
+
+This is usually the first matching rule executed.
+
+2. Tolerance Matching
+
+Definition
+
+Allows small differences in values.
+
+Example:
+
+Internal	External
+10,000	9,990
+
+Rule
+
+ABS(Amount difference) ≤ 10
+
+Common reasons:
+
+bank fees
+
+FX rounding
+
+3. Composite-Key Matching
+
+Definition
+
+Multiple attributes are combined when reference numbers are unreliable.
+
+Example key:
+
+Amount + Value Date + Currency + Counterparty
+
+Example
+
+Internal	External
+$10,000	$10,000
+16 Mar	16 Mar
+USD	USD
+
+Reference missing but still matched.
+
+4. One-to-Many Matching
+
+One internal transaction matches multiple external transactions.
+
+Example
+
+Internal:
+
+Amount
+10,000
+
+External:
+
+Amount
+6,000
+4,000
+
+Matching rule:
+
+6000 + 4000 = 10000
+5. Many-to-One Matching
+
+Multiple internal transactions match one settlement entry.
+
+Example
+
+Internal:
+
+Amount
+200
+300
+500
+
+External:
+
+Amount
+1,000
+
+Common in net settlements.
+
+6. Many-to-Many Matching
+
+Both sides contain multiple transactions.
+
+Example
+
+Internal:
+
+Amount
+100
+200
+
+External:
+
+Amount
+150
+150
+
+Total = 300 on both sides.
+
+7. Fuzzy Matching
+
+Used when references are slightly different.
+
+Example
+
+Internal	External
+TXN12345	TXN-12345
+
+System removes characters or compares similarity.
+
+Used when:
+
+formatting differences
+
+truncation issues
+
+8. Sequential Matching
+
+Transactions are matched based on order or sequence numbers.
+
+Example
+
+Internal sequence:
+
+Seq	Amount
+1	100
+2	200
+
+External sequence:
+
+Seq	Amount
+1	100
+2	200
+
+Often used in clearing file reconciliation.
+
+9. Lifecycle Matching
+
+Used for transactions that pass through multiple stages.
+
+Example lifecycle:
+
+Trade capture
+↓
+Trade confirmation
+↓
+Settlement
+↓
+Accounting entry
+
+Reconciliation verifies that each stage exists.
+
+10. Aging-Based Matching
+
+Older breaks are matched using relaxed rules.
+
+Example:
+
+Day 1 → strict match
+Day 3 → tolerance match
+Day 7 → composite matching
+
+Used to gradually resolve long-standing breaks.
+
+How All Matching Works Together in CTC
+
+Typical sequence:
+
+Exact matching
+      ↓
+Tolerance matching
+      ↓
+Composite matching
+      ↓
+One-to-many / many-to-many
+      ↓
+Fuzzy matching
+      ↓
+Manual investigation
+Complete Matching Landscape
+Category	Matching Type
+System driven	Exact matching
+System driven	Tolerance matching
+System driven	Composite key matching
+System driven	One-to-many
+System driven	Many-to-one
+System driven	Many-to-many
+Advanced	Fuzzy matching
+Advanced	Sequential matching
+Process based	Lifecycle matching
+Operational	Investigation / request matching
+
+✅ Key Insight (important in banking systems)
+
+In large banks:
+80–90% of transactions match automatically using system rules.
+10–20% become breaks.
+Operations teams resolve those using investigation / request / allocation workflows.
