@@ -1,0 +1,183 @@
+1. SWIFT sends instructions, not money.
+SWIFT message tells the receiving bank what to do, but the money moves through accounts, not through SWIFT.
+
+2. How Does Money Actually Move?
+Money moves through Nostro/Vostro accounts.
+Nostro	"Our money held in your bank"
+Vostro	"Your money held in our bank"
+
+3. If There Are 1 Million Transactions Between Two Banks, how does the settlement work
+There are two common settlement approaches.
+Method 1 — Real-Time Gross Settlement (RTGS)
+- Some payment systems settle each transaction individually.
+- Example systems: Fedwire, TARGET2
+Method 2 — Net Settlement (Most Common for High Volume)
+If there are millions of transactions, banks usually use netting.
+
+Many clearing systems perform end-of-day net settlement.
+Example:
+Total A → B	$50M
+Total B → A	$47M
+Final settlement: Net = $3M transfer
+
+Systems like Clareti Transaction Control must reconcile:
+Individual transactions
+          vs
+Net settlement entries
+
+Example:
+
+1,000 payments: Total = $10M
+Nostro statement shows: 1 debit = $10M
+
+Reconciliation rule: Many-to-one matching
+
+Why SWIFT Is Critical for Banks
+- Banks use SWIFT because it provides:
+- Secure communication
+- Standard message formats
+- Global bank connectivity
+- High reliability
+- Regulatory compliance
+- Today it connects 11,000+ financial institutions across 200+ countries.
+
+Every bank on SWIFT has a BIC code (Bank Identifier Code).
+HDFCINBB123
+Part	Meaning
+HDFC	Bank code
+IN	Country
+BB	Location
+XXX	Branch
+
+
+SWIFT Messages:
+MT103	Customer payment (international transfer)
+MT202	Bank-to-bank transfer
+MT940	Bank account statement
+MT950	Interbank account statement
+MT300	Forex trade confirmation
+
+
+** BREAK
+In banking reconciliation systems like Clareti Transaction Control, a “break” means:
+A transaction in one system does not match the corresponding record in another system.
+
+Example:
+Internal Payment System  ≠  Bank Statement / SWIFT / Clearing record
+Below are the 10 most common reasons for reconciliation breaks seen in banks.
+
+1. Timing Differences (Most Common)
+Example
+System	Transaction	Time
+Payment System	$10,000	23:58
+Bank Statement	$10,000	00:05 next day
+Result → Break until next cycle.
+
+2. Missing Transaction (Transaction exists in one system but missing in another system.)
+Possible causes:
+- Message transmission failure
+- File ingestion failure
+- Upstream system error
+
+3. Duplicate Transaction (A transaction appears more than once in a system.)
+Internal System
+TXN1001
+TXN1001
+But only one exists in external system.
+
+Causes:
+- Retry processing
+- Message re-sent
+- System replay
+
+4. Amount Mismatch - Transaction exists in both systems but amount differs.
+Example:
+System	Amount
+Internal	$10,000
+SWIFT	$9,995
+
+Common reasons:
+- Fees deducted
+- FX conversion
+- Decimal rounding
+
+5. Currency Differences - Same transaction but currency representation differs.
+System	Amount
+Internal	USD 10,000
+Settlement	EUR 9,200
+Requires FX mapping or conversion rule.
+
+6. Reference Number Mismatch
+| System                  | Reference | Amount  |
+| ----------------------- | --------- | ------- |
+| Internal Payment System | TXN458921 | $10,000 |
+| SWIFT Message           | ABC99871  | $10,000 |
+
+The same transaction exists in two systems, but the transaction identifiers (references) do not match, so the reconciliation rule cannot link them.
+Reasons:
+- Different Systems Generate Different IDs
+- Sometimes the reference field length differs across systems.
+- Special Characters Removed (TXN-458-921 to TXN458921)
+- Message Routing Through Intermediary Banks
+- Field Mapping Errors in data pipelines
+| Source Field   | Target Field |
+| -------------- | ------------ |
+| Transaction_ID | Payment_Type |
+
+
+
+
+
+7. Partial Settlement - One transaction splits into multiple settlement entries.
+| Internal | External |
+| -------- | -------- |
+| $10,000  | $6,000   |
+|          | $4,000   |
+
+Reconciliation requires 1-to-many matching.
+
+8. DIfference between Net Settlement (Consolidated) vs Gross Transaction (Transaction level)
+Requires many-to-one reconciliation.
+
+9. Data Format / Mapping Issues - Fields are mapped incorrectly.
+| Field          | Error        |
+| -------------- | ------------ |
+| Value Date     | Wrong format |
+| Account Number | Truncated    |
+| Currency       | Missing      |
+
+Usually caused by:
+- ETL errors
+- File parsing errors
+- Interface mapping mistakes
+
+10. Reversals / Cancellations - A transaction gets reversed in one system but not yet reflected in another.
+| System            | Status          |
+| ----------------- | --------------- |
+| Payment System    | Reversed        |
+| Settlement System | Still processed |
+
+Summary:
+
+| #  | Break Type              | Typical Cause     |
+| -- | ----------------------- | ----------------- |
+| 1  | Timing difference       | Posting delay     |
+| 2  | Missing transaction     | Interface failure |
+| 3  | Duplicate transaction   | Retry / replay    |
+| 4  | Amount mismatch         | Fees / FX         |
+| 5  | Currency mismatch       | Conversion        |
+| 6  | Reference mismatch      | ID mapping        |
+| 7  | Partial settlement      | Split payments    |
+| 8  | Net vs gross settlement | Clearing process  |
+| 9  | Data mapping error      | Interface issue   |
+| 10 | Reversal not reflected  | Processing delay  |
+
+
+**** About 70–80% of breaks are caused by just three issues:
+- Timing differences
+- Reference mismatches
+- Amount differences
+
+
+
+
