@@ -12,6 +12,30 @@
 | 10 | Data mapping / format error   | Internal reference **TXN123456789**, external truncated to **TXN123456**         | **1–3%**   | Incorrect interface mapping or inconsistent data formats across systems lead to truncated references or missing fields that break reconciliation matching logic.                           | Correct upstream field mappings, standardize transaction data formats across systems and introduce validation checks during reconciliation data ingestion.                        |
 
 
+What CTC Can Handle Automatically
+CTC is very strong at rule-based and algorithmic matching.
+
+| Break Type              | Can CTC Handle Automatically? | How                          |
+| ----------------------- | ----------------------------- | ---------------------------- |
+| Reference mismatch      | Often yes                     | Composite attribute matching |
+| Amount difference       | Yes                           | Tolerance rules              |
+| Timing difference       | Yes                           | Date tolerance window        |
+| Net vs gross settlement | Yes                           | Many-to-one matching         |
+| Partial settlement      | Yes                           | One-to-many matching         |
+| Duplicate transactions  | Yes                           | Duplicate detection rules    |
+
+What CTC Usually Cannot Resolve Automatically
+Some breaks require information outside the reconciliation data.
+
+| Break Type                  | Why CTC Cannot Fully Resolve                 |
+| --------------------------- | -------------------------------------------- |
+| Missing transaction         | Needs investigation whether payment was sent |
+| Counterparty issue          | Requires confirmation from another bank      |
+| Interface / ETL failure     | Data never reached reconciliation system     |
+| Data mapping errors         | Upstream integration problem                 |
+| Invalid beneficiary details | Payment rejected by receiving bank           |
+
+
 
 
 
