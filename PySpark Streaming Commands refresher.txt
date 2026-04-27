@@ -1,0 +1,113 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+
+# Create Spark session with Kafka support
+spark = (
+    SparkSession.builder
+    .appName("KafkaStructuredStreamingPractice")
+    .master("spark://spark-master:7077")
+    .config(
+        "spark.jars.packages",
+        "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0"
+    )
+    .getOrCreate()
+)
+
+spark.sparkContext.setLogLevel("WARN")
+
+# Define schema of Kafka message value
+schema = StructType([
+    StructField("order_id", IntegerType()),
+    StructField("amount", IntegerType()),
+    StructField("event_time", TimestampType())
+])
+
+# Read stream from Kafka
+kafka_df = (
+    spark.readStream
+         .format("kafka")
+         .option("kafka.bootstrap.servers", "kafka:9092")
+         .option("subscribe", "orders")
+         .option("startingOffsets", "latest")
+         .load()
+)
+
+
+# Convert Kafka value from bytes to structured columns
+events = (
+    kafka_df
+        .selectExpr("CAST(value AS STRING)")
+        .select(from_json(col("value"), schema).alias("data"))
+        .select("data.*")
+)
+
+# Add processing time column for comparison
+events_with_time = events.withColumn("processing_time", current_timestamp())
+
+# ----------------------------
+# 1️⃣ Tumbling window aggregation
+# ----------------------------
+tumbling_window_agg = (
+    events_with_time
+        .withWatermark("event_time", "2 minutes")     # handle late data
+        .groupBy(
+            window(col("event_time"), "1 minute")     # tumbling window
+        )
+        .agg(
+            count("*").alias("event_count"),
+            sum("amount").alias("total_amount"),
+            avg("amount").alias("avg_amount")
+        )
+)
+
+# ----------------------------
+# 2️⃣ Sliding window aggregation
+# ----------------------------
+sliding_window_agg = (
+    events_with_time
+        .withWatermark("event_time", "2 minutes")
+        .groupBy(
+            window(col("event_time"), "5 minutes", "1 minute")  # sliding window
+        )
+        .agg(
+            count("*").alias("event_count"),
+            sum("amount").alias("total_amount")
+        )
+)
+
+# ----------------------------
+# 3️⃣ Write tumbling window output
+# ----------------------------
+tumbling_query = (
+    tumbling_window_agg
+        .writeStream
+        .format("console")
+        .outputMode("update")           # update mode for aggregations
+        .option("truncate", False)
+        .option("checkpointLocation", "/home/jovyan/data/checkpoints/tumbling")
+        .queryName("tumbling_window_query")
+        .start()
+)
+
+# ----------------------------
+# 4️⃣ Write sliding window output
+# ----------------------------
+sliding_query = (
+    sliding_window_agg
+        .writeStream
+        .format("console")
+        .outputMode("update")
+        .option("truncate", False)
+        .option("checkpointLocation", "/home/jovyan/data/checkpoints/sliding")
+        .queryName("sliding_window_query")
+        .start()
+)
+
+# Wait for termination
+spark.streams.awaitAnyTermination()
+
+# sliding_query.stop()
+# tumbling_query.stop()
+
+

@@ -1,0 +1,550 @@
+Configurations:
+spark.sparkContext.getConf().getAll()
+
+🔹 Driver
+spark.driver.memory 	- Driver heap for planning, metadata, broadcast, collect; best practice 8–16 GB in production pipelines.
+spark.driver.cores		- Driver CPU cores for scheduling and planning; best practice 2–4 cores.
+spark.driver.maxResultSize- Maximum data driver can fetch; best practice keep default 1 GB to prevent driver crashes.
+
+🔹 Executor
+spark.executor.memory 	- Executor JVM heap for execution and caching; best practice 8–16 GB to avoid OOM and GC pauses.
+spark.executor.cores	- Parallel tasks per executor; best practice 3–5 cores to balance CPU utilization and garbage collection.
+spark.executor.instances- Total executor JVMs; best practice dynamic allocation enabled, avoid fixed sizing in production workloads.
+spark.executor.memoryOverhead - Off-heap memory for Python, shuffle, JVM; best practice 15–25% for PySpark workloads.
+
+
+🔹 Memory Management
+spark.memory.fraction	- Executor heap fraction for execution and storage; best practice keep default 0.6.
+spark.memory.storageFraction- Storage share of Spark memory; best practice 0.5, reduce for shuffle-heavy workloads.
+
+🔹 Shuffle & Parallelism
+spark.sql.shuffle.partitions - Partitions after shuffle operations; best practice 2–4× total executor cores.
+
+🔹 Serialization & Python
+spark.serializer 	- Serialization mechanism; best practice KryoSerializer for lower memory footprint and faster shuffles.
+
+# Check default Parallism
+spark.sparkContext.defaultParallelism -> Returns the number of partitions Spark uses by default = total cores in all executors for that spark App
+=========================
+from pyspark.sql import SparkSession
+from pyspark.sql.types import *
+from pyspark.sql.functions import *
+from pyspark.sql.window import Window
+
+spark = SparkSession.builder.getOrCreate()
+
+spark.conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+spark.conf.set("spark.sql.adaptive.skewJoin.enabled", "true")
+spark.conf.set("spark.sql.autoBroadcastJoinThreshold", "-1")
+spark.conf.set("spark.sql.shuffle.partitions", "300")
+# executor sizing guideline for 16GB Databricks worker:
+# 1 executor per node, cores=4, memory=10g, overhead=2g, G1GC + MaxGCPauseMillis=200
+
+
+
+schema = StructType([
+    StructField("emp_id", IntegerType()),
+    StructField("emp_name", StringType()),
+    StructField("dept", StringType()),
+    StructField("salary", IntegerType()),
+    StructField("join_date", StringType())
+])
+
+data = [
+    (1, "Alice", "IT", 3000, "2024-01-01"),
+    (2, "Bob", "IT", 4000, "2024-01-05"),
+    (3, "Charlie", "IT", 4000, "2024-01-10"),
+    (4, "David", "HR", 3500, "2024-02-01"),
+    (5, "Eva", "HR", 2000, "2024-02-10"),
+    (6, "Frank", "FIN", 5000, "2024-03-01")
+]
+
+df = spark.createDataFrame(data, schema)
+df = df.withColumn("join_date", to_date("join_date"))
+
+
+df.select(
+    col("emp_id"),
+    upper("emp_name"),
+    expr("salary * 1.1 as bonus"),
+    expr("case when salary >= 4000 then 'HIGH' when salary >= 3000 then 'MEDIUM' else 'LOW' end as band")
+).show()
+
+df.selectExpr(
+    "emp_id",
+    "emp_name",
+    "salary + 500 as revised_salary",
+    "dept"
+).show()
+
+df.select(
+    current_date(),
+    year("join_date"),
+    month("join_date"),
+    dayofmonth("join_date"),
+    datediff(current_date(), "join_date"),
+    add_months("join_date", 1)
+).show()
+
+
+df.filter(col("salary") > 3000).show()
+df.where("dept in ('IT','HR')").show()
+
+
+df.groupBy("dept").agg(
+    count("*").alias("cnt"),
+    avg("salary").alias("avg_salary"),
+    sum("salary").alias("total_salary"),
+    max("salary").alias("max_salary"),
+    min("salary").alias("min_salary")
+).show()
+
+# string functions
+# Sample DataFrame
+df = spark.createDataFrame(
+    [(1, "  Ram Kumar  ", "ram.kumar@databricks.com")],
+    ["id", "name", "email"]
+)
+
+df = (
+    df
+    .withColumn("upper_name", upper(col("name")))                    # Converts string to uppercase
+    .withColumn("lower_name", lower(col("name")))                    # Converts string to lowercase
+    .withColumn("trim_name", trim(col("name")))                      # Removes leading and trailing spaces
+    .withColumn("ltrim_name", ltrim(col("name")))                    # Removes leading spaces
+    .withColumn("rtrim_name", rtrim(col("name")))                    # Removes trailing spaces
+    .withColumn("name_length", length(col("name")))                  # Returns length of the string
+    .withColumn("first_name", substring(col("name"), 1, 3))          # Extracts substring from given position
+    .withColumn("user_domain", split(col("email"), "@")[1])          # Splits string and extracts part
+    .withColumn("email_domain", instr(col("email"), "@"))            # Returns position of substring
+    .withColumn("masked_email", regexp_replace(col("email"), "@.*", "@***"))  # Replaces using regex
+    .withColumn("full_text", concat_ws(" - ", col("name"), col("email")))    # Concatenates strings with separator
+)
+
+df.show(truncate=False)
+
+#math functions
+
+df = df.withColumn("sqrt_value", sqrt("value"))
+df = df.withColumn("pow_value", pow("value", 2))
+df = df.withColumn("abs_value", abs("value"))
+df = df.withColumn("rounded_value", round("value", 2))
+df = df.withColumn("floor_value", floor("value"))
+df = df.withColumn("ceil_value", ceil("value"))
+df = df.withColumn("exp_value", exp("value"))
+df = df.withColumn("log_value", log("value"))
+
+#date functions
+from pyspark.sql.functions import (
+    col, current_date, current_timestamp,
+    to_date, date_format, datediff,
+    date_add, date_sub, year, month, dayofmonth,
+    add_months, last_day, trunc
+)
+
+spark = SparkSession.builder.appName("DateFunctions").getOrCreate()
+
+# Sample DataFrame
+df = spark.createDataFrame(
+    [(1, "2024-01-15"), (2, "2023-12-31")],
+    ["id", "join_date"]
+)
+
+df = df.withColumn("join_date", to_date(col("join_date")))  # Converts string to date
+
+df = (
+    df
+    .withColumn("today", current_date())                     	# Returns current system date
+    .withColumn("now", current_timestamp())                  	# Returns current timestamp
+    .withColumn("year", year(col("join_date")))              	# Extracts year from date
+    .withColumn("month", month(col("join_date")))            	# Extracts month from date
+    .withColumn("day", dayofmonth(col("join_date")))          	# Extracts day from date
+    .withColumn("days_since_join", datediff(current_date(), col("join_date"))) # Date difference in days
+    .withColumn("date_plus_10", date_add(col("join_date"), 10)) # Adds days to date
+    .withColumn("date_minus_5", date_sub(col("join_date"), 5))  # Subtracts days from date
+    .withColumn("plus_2_months", add_months(col("join_date"), 2)) # Adds months to date
+    .withColumn("month_end", last_day(col("join_date")))      	# Returns last day of the month
+    .withColumn("month_trunc", trunc(col("join_date"), "MM")) 	# Truncates date to month start
+    .withColumn("formatted_date", date_format(col("join_date"), "yyyy-MM-dd")) # Formats date
+)
+
+df.show(truncate=False)
+
+#Join
+dept_df = spark.createDataFrame(
+    [("IT", "India"), ("HR", "USA"), ("FIN", "UK"), ("OPS", "SG")],
+    ["dept", "location"]
+)
+
+df.join(dept_df, "dept", "inner").show()
+df.join(dept_df, "dept", "left").show()
+df.join(dept_df, "dept", "right").show()
+df.join(dept_df, "dept", "full").show()
+df.join(dept_df, "dept", "left_semi").show()
+df.join(dept_df, "dept", "left_anti").show()
+
+df.join(broadcast(dept_df), "dept").show()
+
+w_dept_salary_desc = Window.partitionBy("dept").orderBy(col("salary").desc())
+w_dept_salary_asc = Window.partitionBy("dept").orderBy(col("salary").asc())
+
+#Rowsbetween - Rolling sum over the last x rows and current row
+w_running = Window.partitionBy("dept").orderBy("join_date") \
+    .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+
+df.withColumn("row_number", row_number().over(w_dept_salary_desc)).show()
+df.withColumn("rank", rank().over(w_dept_salary_desc)).show()
+df.withColumn("dense_rank", dense_rank().over(w_dept_salary_desc)).show()
+df.withColumn("ntile", ntile(2).over(w_dept_salary_desc)).show()
+df.withColumn("lag_salary", lag("salary").over(w_dept_salary_desc)).show()
+df.withColumn("lead_salary", lead("salary").over(w_dept_salary_desc)).show()
+df.withColumn("running_salary", sum("salary").over(w_running)).show()
+
+
+#########
+# ======================================================
+# PySpark – Most Common Window Functions (Interview Core)
+# ======================================================
+
+from pyspark.sql import SparkSession
+from pyspark.sql.window import Window
+from pyspark.sql.functions import (
+    col, row_number, rank, dense_rank,
+    lag, lead, sum, avg, max, min
+)
+
+spark = SparkSession.builder.appName("WindowFunctions").getOrCreate()
+
+# Sample DataFrame
+df = spark.createDataFrame(
+    [
+        (1, "IT", 50000),
+        (2, "IT", 60000),
+        (3, "HR", 40000),
+        (4, "HR", 45000),
+        (5, "HR", 45000)
+    ],
+    ["emp_id", "dept", "salary"]
+)
+
+dept_order_window = Window.partitionBy("dept").orderBy(col("salary").desc())   # Partition + ordering
+dept_window = Window.partitionBy("dept")                                       # Partition only
+
+# Ranking Functions
+df = (
+    df
+    .withColumn("row_number", row_number().over(dept_order_window))  # Unique sequential number per partition
+    .withColumn("rank", rank().over(dept_order_window))              # Same rank for ties, with gaps
+    .withColumn("dense_rank", dense_rank().over(dept_order_window))  # Same rank for ties, no gaps
+)
+
+# Lead & Lag Functions
+df = (
+    df
+    .withColumn("prev_salary", lag("salary", 1).over(dept_order_window))   # Previous row value
+    .withColumn("next_salary", lead("salary", 1).over(dept_order_window))  # Next row value
+)
+
+# Aggregate Window Functions
+df = (
+    df
+    .withColumn("dept_total_salary", sum("salary").over(dept_window))  # Sum per department
+    .withColumn("dept_avg_salary", avg("salary").over(dept_window))    # Average per department
+    .withColumn("dept_max_salary", max("salary").over(dept_window))    # Max per department
+    .withColumn("dept_min_salary", min("salary").over(dept_window))    # Min per department
+)
+
+df.show(truncate=False)
+
+# Interview Notes:
+# - row_number() is used for deterministic deduplication
+# - rank() creates gaps when ties exist
+# - dense_rank() avoids gaps
+# - Window functions do not reduce rows
+# - Overuse of window functions can increase shuffle cost
+# --------------------------------------
+#################
+
+#pivot, cube, rollup
+df.groupBy("dept").pivot("emp_name").sum("salary").show()
+
+df.groupBy("dept").pivot("band", ["HIGH", "MEDIUM", "LOW"]).count().show()
+
+unpivot_df = df.selectExpr(
+    "emp_id",
+    "stack(2, 'salary', salary, 'bonus', salary * 1.1) as (metric, value)"
+)
+unpivot_df.show()
+
+df.cube("dept").agg(sum("salary").alias("total_salary")).show()
+df.rollup("dept").agg(sum("salary").alias("total_salary")).show()
+df.groupBy(grouping_id("dept"), "dept").agg(sum("salary")).show()
+
+df.repartition(200, "dept")
+df.coalesce(50)
+
+
+#############
+## Cache vs Persist
+df.cache()
+df.persist()
+df.count()
+
+from pyspark.sql import SparkSession
+from pyspark import StorageLevel
+
+spark = SparkSession.builder.appName("PersistLevels").getOrCreate()
+df = spark.range(0, 1000000)
+
+df.persist(StorageLevel.MEMORY_ONLY)        # Stores deserialized data in memory; recomputes if memory is insufficient
+df.persist(StorageLevel.MEMORY_ONLY_SER)    # Stores serialized data in memory; saves memory but adds CPU overhead
+df.persist(StorageLevel.MEMORY_AND_DISK)    # Stores in memory and spills to disk; default used by cache()
+df.persist(StorageLevel.MEMORY_AND_DISK_SER)# Serialized memory + disk spill; efficient for large datasets
+df.persist(StorageLevel.DISK_ONLY)          # Stores only on disk; slower but avoids recomputation
+df.persist(StorageLevel.OFF_HEAP)            # Stores data outside JVM heap; reduces GC overhead (needs off-heap enabled)
+
+# cache() == persist(StorageLevel.MEMORY_AND_DISK)
+# persist() is lazy and materializes only after an action
+#############
+
+
+df.write.mode("overwrite").format("parquet").save("/tmp/emp_parquet")
+spark.read.parquet("/tmp/emp_parquet").show()
+
+df.explain()
+df.explain("formatted")
+
+
+df.limit(5).collect()
+
+# Duplicate Removal + NULL Handling (One Script)
+
+df.distinct()
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, row_number, when, desc
+from pyspark.sql.window import Window
+
+data = [
+    (1, "Ram", 10000, "IT", "2024-01-01"),
+    (1, "Ram", None,  "IT", "2024-01-10"),  # duplicate emp_id, newer record
+    (2, "Sam", None,  None, "2024-01-05"),  # null salary & dept
+    (3, None,  15000, "HR", "2024-01-03"),  # null name
+    (3, None,  15000, "HR", "2024-01-03"),  # exact duplicate row
+    (None, "John", 12000, "FIN", "2024-01-02")  # null business key
+]
+
+columns = ["emp_id", "name", "salary", "dept", "update_ts"]
+
+df = spark.createDataFrame(data, columns)
+df_valid = df.dropna(subset=["emp_id"])
+
+# --------------------------------------------
+# 4. Deterministic Deduplication
+# Keep latest record per emp_id using window
+# --------------------------------------------
+window_spec = Window.partitionBy("emp_id").orderBy(desc("update_ts"))
+
+df_dedup = (
+    df_valid
+    .withColumn("rn", row_number().over(window_spec))
+    .filter(col("rn") == 1)
+    .drop("rn")
+)
+
+# 5. Remove Exact Duplicate Rows (Safety Net)
+df_dedup = df_dedup.dropDuplicates()
+
+# 6. Handle NULL Values (Imputation)
+
+# Fill simple NULLs
+df_filled = df_dedup.fillna({
+    "salary": 0,
+    "dept": "UNKNOWN",
+    "name": "NA"
+})
+
+# 7. Conditional NULL Handling (when / otherwise)
+df_final = df_filled.withColumn(
+    "salary",
+    when(col("salary").isNull() | (col("salary") < 0), 0)
+    .otherwise(col("salary"))
+)
+
+################
+# ====================================================================================
+# PySpark SQL – End-to-End Interview Refresher Script (Senior Level)
+# ====================================================================================
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, sum, count
+
+# 1. Spark Session + Configurations
+spark = SparkSession.builder \
+    .appName("SeniorPySparkSQLRefresher") \
+    .config("spark.sql.shuffle.partitions", "4") \   # Controls shuffle parallelism
+    .config("spark.sql.adaptive.enabled", "true") \  # Enables AQE
+    .enableHiveSupport() \                            # Enables Hive metastore & SQL tables
+    .getOrCreate()
+
+# 2. Create Database (SQL)
+spark.sql("CREATE DATABASE IF NOT EXISTS interview_db")   # Creates database
+spark.sql("USE interview_db")                              # Switches database
+
+# 3. Create DataFrames (Source Data)
+emp_df = spark.createDataFrame(
+    [(1, "Ram", "IT", 50000),
+     (2, "Sam", "IT", 60000),
+     (3, "John", "HR", 40000)],
+    ["emp_id", "name", "dept", "salary"]
+)
+
+dept_df = spark.createDataFrame(
+    [("IT", "Technology"),
+     ("HR", "Human Resources")],
+    ["dept", "dept_name"]
+)
+
+# 4. Create Temporary Views (DF → SQL)
+
+emp_df.createOrReplaceTempView("emp")      # Session-scoped temp view
+dept_df.createOrReplaceTempView("dept")    # Enables SQL queries on DF
+
+# 5. Basic SQL Queries
+
+spark.sql("SELECT * FROM emp").show()      # Select query
+spark.sql("SELECT emp_id, salary FROM emp WHERE salary > 45000").show()  # Filter
+
+
+# """ is for multiline queries
+# 6. Join Using SQL
+
+joined_df = spark.sql("""
+    SELECT e.emp_id, e.name, d.dept_name, e.salary
+    FROM emp e
+    JOIN dept d
+    ON e.dept = d.dept
+""")                                        # SQL join between views
+
+joined_df.show()
+
+# 7. Aggregation (SQL)
+
+agg_df = spark.sql("""
+    SELECT dept_name, SUM(salary) AS total_salary, COUNT(*) AS emp_count
+    FROM (
+        SELECT e.salary, d.dept_name
+        FROM emp e JOIN dept d ON e.dept = d.dept
+    )
+    GROUP BY dept_name
+""")                                        # GROUP BY aggregation
+
+agg_df.show()
+
+# 8. SQL Result → DataFrame Operations
+
+agg_df.filter(col("total_salary") > 50000).show()   # DataFrame API on SQL result
+
+# 9. Create Managed Table from DataFrame
+
+agg_df.write.mode("overwrite").saveAsTable("dept_salary_summary")  # Stores as Hive table
+
+# 10. Query Managed Table (SQL)
+
+spark.sql("SELECT * FROM dept_salary_summary").show()  # Reads from metastore table
+
+# 11. Show Tables & Describe Table
+
+spark.sql("SHOW TABLES").show()                         # Lists tables
+spark.sql("DESCRIBE TABLE dept_salary_summary").show()  # Table schema
+
+# 12. DataFrame → SQL Table (Explicit Schema Control)
+
+emp_df.write.mode("overwrite").format("parquet").saveAsTable("emp_table")  # Writes DF as table
+
+# 13. SQL Table → DataFrame
+
+emp_table_df = spark.table("emp_table")                 # Reads table as DataFrame
+emp_table_df.show()
+
+# 14. Drop Table & Database (Cleanup)
+
+spark.sql("DROP TABLE IF EXISTS dept_salary_summary")   # Drops table
+spark.sql("DROP TABLE IF EXISTS emp_table")             # Drops table
+spark.sql("DROP DATABASE IF EXISTS interview_db CASCADE")  # Drops DB and all objects
+
+
+### Without Temp View
+
+df = spark.read.format('csv').option('header', 'true').load('/samples/customers.csv')
+spark.sql("select first_name from {customers_df}",customers_df = df).show()
+
+
+# --------------------------------------
+# Interview Notes (Must Say):
+# - Temp views are session-scoped. 
+# - saveAsTable uses Hive metastore
+# - SQL and DataFrame APIs are interchangeable
+# - Spark SQL uses Catalyst + Tungsten under the hood
+# - AQE optimizes joins and shuffle at runtime
+# --------------------------------------
+########
+
+# =======================
+# SCRIPT-BASED INTERVIEW SCENARIOS
+# =======================
+
+# Find second highest salary overall
+df.orderBy(col("salary").desc()).limit(2).orderBy("salary").limit(1).show()
+
+# Find second highest salary per department
+df.filter(dense_rank().over(w_dept_salary_desc) == 2).show()
+
+# Find employees earning above department average
+df.withColumn(
+    "dept_avg",
+    avg("salary").over(Window.partitionBy("dept"))
+).filter(col("salary") > col("dept_avg")).show()
+
+# Find latest joined employee per department
+df.withColumn(
+    "rn",
+    row_number().over(Window.partitionBy("dept").orderBy(col("join_date").desc()))
+).filter(col("rn") == 1).show()
+
+# Handle data skew before join using salting
+df_salted = df.withColumn("salt", expr("cast(rand() * 10 as int)"))
+dept_salted = dept_df.withColumn("salt", explode(array([lit(i) for i in range(10)])))
+df_salted.join(dept_salted, ["dept", "salt"]).show()
+
+# Convert rows to JSON for downstream system
+df.select(to_json(struct("*")).alias("json")).show(truncate=False)
+
+# Parse nested JSON into columns
+json_df = spark.read.json(
+    spark.createDataset([
+        '{"id":1,"info":{"city":"BLR","pin":560001}}'
+    ])
+)
+json_df.select("id", "info.city", "info.pin").show()
+
+# Identify long-running transformations
+df.explain("extended")
+
+# Reduce shuffle size explicitly when AQE is constrained
+spark.conf.set("spark.sql.shuffle.partitions", "200")
+
+# Avoid driver OOM by sampling instead of collect
+df.sample(0.1).show()
+
+# Write partitioned output for downstream reads
+df.write.mode("overwrite").partitionBy("dept").parquet("/tmp/emp_part")
+
+# Detect skew using approximate quantiles
+df.groupBy("dept").count().orderBy(col("count").desc()).show()
+
+==========================
+
+
+

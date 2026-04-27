@@ -1,0 +1,123 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import *
+from pyspark.sql.types import *
+
+# -------------------------------------------------
+# 1️⃣ Spark Session
+# -------------------------------------------------
+spark = (
+    SparkSession.builder
+        .appName("KafkaStreamingWithWindowsAndSummary")
+        .master("spark://spark-master:7077")
+        .getOrCreate()
+)
+
+spark.sparkContext.setLogLevel("WARN")
+
+# -------------------------------------------------
+# 2️⃣ Paths
+# -------------------------------------------------
+BASE_PATH = "/home/jovyan/data"
+
+RAW_EVENTS_PATH      = f"{BASE_PATH}/delta/raw_orders"
+TUMBLING_TABLE_PATH  = f"{BASE_PATH}/delta/tumbling_orders"
+
+RAW_CHECKPOINT       = f"{BASE_PATH}/checkpoints/raw"
+TUMBLING_CHECKPOINT  = f"{BASE_PATH}/checkpoints/tumbling"
+
+# -------------------------------------------------
+# 3️⃣ Kafka schema
+# -------------------------------------------------
+schema = StructType([
+    StructField("order_id", IntegerType()),
+    StructField("amount", IntegerType()),
+    StructField("event_time", TimestampType())
+])
+
+# -------------------------------------------------
+# 4️⃣ Read from Kafka
+# -------------------------------------------------
+kafka_df = (
+    spark.readStream
+        .format("kafka")
+        .option("kafka.bootstrap.servers", "kafka:9092")
+        .option("subscribe", "orders")
+        .option("startingOffsets", "latest")
+        .option("failOnDataLoss", "false")
+        .load()
+)
+
+# -------------------------------------------------
+# 5️⃣ Parse events
+# -------------------------------------------------
+events = (
+    kafka_df
+        .selectExpr("CAST(value AS STRING)")
+        .select(from_json(col("value"), schema).alias("data"))
+        .select("data.*")
+)
+
+# -------------------------------------------------
+# 6️⃣ Store RAW events (append-only)
+# -------------------------------------------------
+raw_query = (
+    events
+        .writeStream
+        .format("delta")
+        .outputMode("append")
+        .option("checkpointLocation", RAW_CHECKPOINT)
+        .option("path", RAW_EVENTS_PATH)
+        .queryName("raw_events_query")
+        .start()
+)
+
+# -------------------------------------------------
+# 7️⃣ Tumbling window summary (1 minute)
+# -------------------------------------------------
+tumbling_agg = (
+    events
+        .withWatermark("event_time", "2 minutes")
+        .groupBy(window(col("event_time"), "1 minute"))
+        .agg(
+            count("*").alias("event_count"),
+            sum("amount").alias("total_amount"),
+            avg("amount").alias("avg_amount")
+        )
+)
+
+# -------------------------------------------------
+# 8️⃣ Write summary to Delta + PRINT summary
+# -------------------------------------------------
+def print_summary(batch_df, batch_id):
+    print(f"\n===== Tumbling Window Summary | Batch {batch_id} =====")
+    batch_df.orderBy(col("window.start")).show(truncate=False)
+
+summary_query = (
+    tumbling_agg
+        .writeStream
+        .outputMode("append")
+        .option("checkpointLocation", TUMBLING_CHECKPOINT)
+        .foreachBatch(
+            lambda df, batch_id: (
+                df.write
+                  .format("delta")
+                  .mode("append")
+                  .save(TUMBLING_TABLE_PATH),
+                print_summary(df, batch_id)
+            )
+        )
+        .queryName("tumbling_summary_query")
+        .start()
+)
+
+# -------------------------------------------------
+# 9️⃣ Graceful shutdown
+# -------------------------------------------------
+try:
+    spark.streams.awaitAnyTermination()
+
+except KeyboardInterrupt:
+    print("Stopping streaming queries gracefully...")
+    raw_query.stop()
+    summary_query.stop()
+    print("Streaming stopped cleanly.")
