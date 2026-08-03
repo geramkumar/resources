@@ -1,0 +1,170 @@
+username = dbutils.secrets.get("postgres-scope", "username")
+password = dbutils.secrets.get("postgres-scope", "password")
+
+jdbc_url = (
+    "jdbc:postgresql://myserver.postgres.database.azure.com:5432/salesdb"
+)
+
+df = (
+    spark.read
+    .format("jdbc")
+    .option("url", jdbc_url)
+    .option("dbtable", "public.customer")
+    .option("user", username)
+    .option("password", password)
+    .option("driver", "org.postgresql.Driver")
+    .option("fetchsize", "10000")
+    .load()
+)
+
+df.write \
+    .mode("overwrite") \
+    .format("delta") \
+    .saveAsTable("main.sales.customer")
+
+Options:
+Parallel Reads for large tables:
+
+.option("partitionColumn", "customer_id")
+.option("lowerBound", "1")
+.option("upperBound", "10000000")
+.option("numPartitions", "8")
+
+This significantly improves ingestion performance.
+
+Fetch Size
+.option("fetchsize", "10000")
+
+Avoids loading too many rows into memory.
+
+Driver Use
+.option("driver", "org.postgresql.Driver")
+The PostgreSQL JDBC driver is available on recent Databricks runtimes. If your runtime doesn't include it, attach the PostgreSQL JDBC library to the cluster.
+
+
+Unity Catalog Permissions: Ensure the executing principal has permissions such as:
+
+USE CATALOG main;
+USE SCHEMA sales;
+CREATE TABLE or MODIFY
+depending on whether the target table already exist
+
+
+
+LAKEHOUSE FEDERATION: No need of data copy
+
+When do you need a UC Connection? You create a Unity Catalog Connection only if you're using Lakehouse Federation.
+
+PostgreSQL
+     │
+UC Connection
+     │
+Foreign Catalog
+     │
+Foreign Schema
+     │
+SELECT * FROM postgres_catalog.public.customer
+
+In that case, Databricks queries PostgreSQL directly via SQL without ingesting the data into Delta tables.
+
+Example: SELECT * FROM postgres_catalog.public.customer;
+No Spark JDBC code is needed.
+
+
+STEPS TO CREATE CONNECTION to PostgreSQL
+
+Step 1: Create a Secret (Recommended)
+-- Password is stored in Secret Scope
+Scope : postgres-scope
+Key   : password
+
+Step 2: Create Connection
+CREATE CONNECTION postgres_flex_conn
+TYPE POSTGRESQL
+OPTIONS (
+  host 'myserver.postgres.database.azure.com',
+  port '5432',
+  user 'postgresadmin',
+  password secret('postgres-scope', 'password'),
+  database 'salesdb'
+);
+
+Step 3: Verify Connection
+SHOW CONNECTIONS;
+
+Describe it : DESCRIBE CONNECTION postgres_flex_conn;
+
+Step 4: Create Foreign Catalog
+CREATE FOREIGN CATALOG postgres_catalog
+USING CONNECTION postgres_flex_conn;
+
+Step 5: Verify Catalog
+SHOW CATALOGS;
+
+Step 6: Browse Schemas
+SHOW SCHEMAS IN postgres_catalog;
+
+Step 7: Browse Tables
+SHOW TABLES IN postgres_catalog.public;
+
+Step 8: Query PostgreSQL Table
+SELECT *
+FROM postgres_catalog.public.customer
+LIMIT 10;
+
+Step 9: Copy Data into Unity Catalog Managed Table
+CREATE TABLE main.sales.customer
+AS
+SELECT *
+FROM postgres_catalog.public.customer;
+
+or
+
+INSERT INTO main.sales.customer
+SELECT *
+FROM postgres_catalog.public.customer;
+
+
+Step 10: Refresh Metadata (Optional)
+REFRESH FOREIGN CATALOG postgres_catalog;
+
+
+NOTE:
+For performance and scalability reasons, Databricks caches/catalogs the metadata of the foreign catalog instead of querying PostgreSQL for every metadata operation.
+
+For example:
+
+SHOW SCHEMAS IN postgres_catalog;
+SHOW TABLES IN postgres_catalog.public;
+DESCRIBE TABLE postgres_catalog.public.customer;
+
+If each of these commands had to connect to PostgreSQL every time, metadata operations would become slower and place unnecessary load on the source database.
+
+What is cached?
+
+Typically, metadata such as:
+
+Catalog
+Schemas
+Tables
+Views
+Columns
+Data types
+
+What is not cached? The table data itself.
+
+When you run: SELECT * FROM postgres_catalog.public.customer;
+Databricks pushes the query to PostgreSQL (subject to query optimization and pushdown capabilities) and reads the current data from the source. It does not read from a local copy of the table data.
+
+Why REFRESH FOREIGN CATALOG exists
+Suppose the PostgreSQL DBA creates a new table:
+
+CREATE TABLE invoice (...);
+
+Databricks' cached metadata doesn't know about it yet.
+
+Running:
+
+REFRESH FOREIGN CATALOG postgres_catalog;
+
+tells Databricks to synchronize its metadata with PostgreSQL so the new objects become visible.
