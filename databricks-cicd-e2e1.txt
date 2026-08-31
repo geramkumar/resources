@@ -1,0 +1,1805 @@
+Below is the end-to-end runbook I would use for your scenario: a secured Azure Databricks multi-tenant workspace, no public network access, no cluster policies, Tenant A has Python dependencies in /Volumes/tenant_shared/tenant_a/python_packages/, GitLab is the CI/CD system, and the design must have a clean path to Serverless.
+
+One important correction from the earlier design: for classic compute, the init script is the fallback mechanism because you explicitly don't want cluster policies; for Serverless, the init script is not used at all. Serverless uses task/job environments and dependencies. Databricks explicitly states that serverless does not support init scripts or compute policies.
+
+Also, for your specific requirement of "copy libraries from DEV to PREPROD", I recommend promoting the exact dependency artifact, rather than copying whatever happens to be installed on a DEV cluster. The source of truth is Git + the approved package artifact.
+
+End-to-end architecture
+                              GitLab
+                                │
+                   ┌────────────┴────────────┐
+                   │                         │
+             Application                  Dependencies
+             DAB source                   requirements.txt
+                   │                         │
+                   └────────────┬────────────┘
+                                │
+                         GitLab Pipeline
+                                │
+                ┌───────────────┼────────────────┐
+                │               │                │
+               DEV           PREPROD           PROD
+                │               │                │
+                ▼               ▼                ▼
+       ┌────────────────────────────────────────────────┐
+       │                UC Volumes                      │
+       │                                                │
+       │ /Volumes/tenant_shared/tenant_a/python_packages│
+       │                                                │
+       │ tenant_a_requirements.txt                     │
+       │ *.whl                                         │
+       │ install_libraries.sh                          │
+       └─────────────────────┬──────────────────────────┘
+                             │
+                  ┌──────────┴──────────┐
+                  │                     │
+             Classic Compute       Serverless
+                  │                     │
+             init script          Job Environment
+                  │                     │
+                  └──────────┬──────────┘
+                             │
+                         Notebooks
+                             │
+                             ▼
+                       Key Vault
+                             │
+                       Secret Scope
+Part 1 — Decide exactly what is promoted
+
+Before creating anything, establish this rule:
+
+Item	Source of truth	Promoted?
+Notebook code	Git	Yes
+DAB job definitions	Git	Yes
+requirements.txt	Git	Yes
+Python wheels	Artifact/UC Volume	Yes
+Environment variable names	Git	Yes
+Environment variable values	Environment config	Yes
+Secret values	Key Vault	No
+Secret names	Git/config	Yes
+DEV cluster	Databricks	No
+PREPROD cluster	Databricks	No
+Installed pip state	Cluster	No
+
+The key principle is:
+
+Promote the desired state, not the state of a running DEV cluster.
+
+Part 2 — Final repository
+
+Create this exact repository structure:
+
+tenant-a-databricks/
+│
+├── databricks.yml
+├── .gitignore
+├── .gitlab-ci.yml
+│
+├── config/
+│   ├── dev.yml
+│   ├── preprod.yml
+│   └── prod.yml
+│
+├── requirements/
+│   └── tenant_a_requirements.txt
+│
+├── init_scripts/
+│   └── install_tenant_a_libraries.sh
+│
+├── resources/
+│   └── jobs.yml
+│
+├── notebooks/
+│   ├── main.py
+│   └── validate_environment.py
+│
+└── scripts/
+    ├── upload_dependencies.sh
+    ├── deploy_classic_cluster.sh
+    ├── deploy_dab.sh
+    └── validate_environment.sh
+Part 3 — Prerequisites
+
+You need:
+
+Local developer machine
+
+Install:
+
+git --version
+az version
+databricks version
+python --version
+
+You need:
+
+Git
+VS Code
+Azure CLI
+Databricks CLI
+access to your GitLab repository
+appropriate Databricks permissions
+
+For production, don't let developers use personal PATs for CI/CD.
+
+Use your bank-approved:
+
+GitLab
+   ↓
+Workload identity / service principal
+   ↓
+Databricks
+
+Prefer GitLab OIDC/federated authentication over a long-lived client secret if your organization supports it.
+
+Part 4 — Create GitLab repository
+Step 1 — Create project
+
+In GitLab:
+
+New project
+   ↓
+Create blank project
+
+Use:
+
+Project name:
+tenant-a-databricks
+
+Visibility:
+
+Private
+
+Do not initialize with random README/configuration files if you're going to create the project locally.
+
+Part 5 — Clone repository
+
+From VS Code terminal:
+
+git clone https://gitlab.example.com/<group>/tenant-a-databricks.git
+
+cd tenant-a-databricks
+
+code .
+
+Verify:
+
+git status
+
+Expected:
+
+On branch main
+nothing to commit
+Part 6 — Create development branch
+
+Never develop directly on main.
+
+git checkout -b feature/tenant-a-environment
+
+Verify:
+
+git branch
+
+You should see:
+
+* feature/tenant-a-environment
+  main
+Part 7 — .gitignore
+
+Create:
+
+.gitignore
+
+Use:
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Databricks
+.databricks/
+
+# IDE
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+.env.*
+*.secret
+
+# Generated files
+deployment.env
+
+# Local artifacts
+dist/
+build/
+wheelhouse/
+
+Never commit:
+
+client secret
+password
+API key
+Key Vault secret value
+PAT
+Part 8 — Requirements file
+
+Create:
+
+requirements/tenant_a_requirements.txt
+
+Example:
+
+pandas==2.3.2
+numpy==2.3.3
+requests==2.32.5
+openpyxl==3.1.5
+python-dateutil==2.9.0.post0
+pytz==2025.2
+PyYAML==6.0.2
+jsonschema==4.25.1
+cryptography==45.0.7
+tenacity==9.1.2
+
+These versions are examples; use versions approved by your security/dependency-management process.
+
+Also remove packages already supplied by the Databricks Runtime unless your application specifically requires a particular version.
+
+Part 9 — Your existing Volume
+
+You specified:
+
+/Volumes/tenant_shared/tenant_a/python_packages/
+
+Use it as the dependency repository.
+
+Final structure:
+
+/Volumes/tenant_shared/tenant_a/python_packages/
+
+    tenant_a_requirements.txt
+
+    wheels/
+        pandas-2.3.2-*.whl
+        ...
+    
+    init_scripts/
+        install_tenant_a_libraries.sh
+
+I recommend this structure rather than mixing all files directly in one directory.
+
+Part 10 — Create the Volume directories
+
+From a Databricks notebook or approved administrative process:
+
+dbutils.fs.mkdirs(
+    "/Volumes/tenant_shared/tenant_a/python_packages/wheels"
+)
+
+dbutils.fs.mkdirs(
+    "/Volumes/tenant_shared/tenant_a/python_packages/init_scripts"
+)
+
+Or use the approved Volume upload mechanism.
+
+Verify:
+
+display(
+    dbutils.fs.ls(
+        "/Volumes/tenant_shared/tenant_a/python_packages/"
+    )
+)
+Part 11 — Permissions
+
+Tenant A users/service principal should have the required Unity Catalog permissions.
+
+Conceptually:
+
+GRANT USE CATALOG
+ON CATALOG tenant_shared
+TO `tenant-a-users`;
+
+GRANT USE SCHEMA
+ON SCHEMA tenant_shared.tenant_a
+TO `tenant-a-users`;
+
+GRANT READ VOLUME
+ON VOLUME tenant_shared.tenant_a.python_packages
+TO `tenant-a-users`;
+
+Your platform team should apply the actual group/service-principal names.
+
+UC Volumes are appropriate for storing wheels, requirements files and cluster-scoped init scripts.
+
+Part 12 — Prepare the init script
+
+Create:
+
+init_scripts/install_tenant_a_libraries.sh
+
+Use:
+
+#!/bin/bash
+
+set -Eeuo pipefail
+
+REQUIREMENTS_FILE="/Volumes/tenant_shared/tenant_a/python_packages/tenant_a_requirements.txt"
+
+LOG_DIR="/tmp/tenant-a"
+LOG_FILE="${LOG_DIR}/library-install.log"
+
+mkdir -p "${LOG_DIR}"
+
+exec > >(tee -a "${LOG_FILE}") 2>&1
+
+echo "=============================================="
+echo "Tenant A Python dependency installation"
+echo "UTC start: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+echo "=============================================="
+
+if [[ ! -f "${REQUIREMENTS_FILE}" ]]; then
+    echo "ERROR: requirements file not found:"
+    echo "${REQUIREMENTS_FILE}"
+    exit 10
+fi
+
+echo "Python:"
+python --version
+
+echo "pip:"
+python -m pip --version
+
+echo
+echo "Requirements:"
+cat "${REQUIREMENTS_FILE}"
+
+echo
+echo "Installing dependencies..."
+
+python -m pip install \
+    --disable-pip-version-check \
+    --no-cache-dir \
+    --requirement "${REQUIREMENTS_FILE}"
+
+echo
+echo "Checking dependency consistency..."
+
+python -m pip check
+
+echo
+echo "Installed packages:"
+python -m pip list
+
+echo
+echo "=============================================="
+echo "Tenant A dependency installation SUCCESS"
+echo "UTC end: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+echo "=============================================="
+Why this is production-friendly
+
+It:
+
+fails the cluster startup if installation fails
+uses a pinned requirements file
+runs pip check
+produces an installation log
+doesn't contain credentials
+doesn't access public PyPI directly if your package source is private
+
+Databricks states that a cluster-scoped init script returning a non-zero exit code causes cluster startup to fail.
+
+Part 13 — Private package requirement
+
+This is critical for your secured workspace.
+
+This command:
+
+pip install -r requirements.txt
+
+must resolve packages from an approved internal package source.
+
+You have two choices.
+
+Option A — Private PyPI
+
+For example:
+
+Databricks
+    ↓
+private network
+    ↓
+Azure DevOps Artifacts / approved private PyPI
+
+Then configure pip appropriately.
+
+Option B — Wheels in UC Volume
+
+Your volume contains:
+
+wheels/
+    pandas-...
+    requests-...
+    ...
+
+and the requirements file references them.
+
+For example:
+
+/Volumes/tenant_shared/tenant_a/python_packages/wheels/pandas-2.3.2-....whl
+
+For a completely isolated environment, Option B is the safer architecture if your package set is small and manageable.
+
+Do not allow a production cluster to silently access public PyPI.
+
+Part 14 — Upload requirements to DEV
+
+If the source file is already in the repository:
+
+databricks fs cp \
+  requirements/tenant_a_requirements.txt \
+  dbfs:/Volumes/tenant_shared/tenant_a/python_packages/tenant_a_requirements.txt \
+  --overwrite
+
+However, depending on your CLI version and workspace configuration, use the supported Volume file upload syntax your certified CLI exposes. The important target is:
+
+/Volumes/tenant_shared/tenant_a/python_packages/tenant_a_requirements.txt
+Part 15 — Upload init script to DEV Volume
+databricks fs cp \
+  init_scripts/install_tenant_a_libraries.sh \
+  dbfs:/Volumes/tenant_shared/tenant_a/python_packages/init_scripts/install_tenant_a_libraries.sh \
+  --overwrite
+
+Again, the target is:
+
+/Volumes/tenant_shared/tenant_a/python_packages/init_scripts/install_tenant_a_libraries.sh
+Part 16 — Standard access mode requirement
+
+For modern Unity Catalog compute, use:
+
+Standard access mode
+
+where supported.
+
+For standard access mode, init scripts stored in UC Volumes are supported from DBR 13.3 LTS onward, and the init script must be allowlisted by an administrator.
+
+Your platform administrator therefore needs to allowlist:
+
+/Volumes/tenant_shared/tenant_a/python_packages/init_scripts/install_tenant_a_libraries.sh
+Part 17 — Configure Tenant A DEV cluster
+
+For the Tenant A All-Purpose cluster:
+
+Compute
+   ↓
+Tenant A cluster
+   ↓
+Edit
+   ↓
+Advanced options
+   ↓
+Init Scripts
+   ↓
+Volume
+
+Specify:
+
+/Volumes/tenant_shared/tenant_a/python_packages/init_scripts/install_tenant_a_libraries.sh
+
+Do not use DBFS.
+
+DBFS-based init scripts are end-of-life; Databricks recommends UC Volumes for modern UC workloads.
+
+Part 18 — Environment variables for classic compute
+
+For today's All-Purpose cluster, configure:
+
+TENANT_ID=TENANT_A
+APPLICATION_NAME=tenant-a-platform
+DEPLOYMENT_ENV=DEV
+SECRET_SCOPE=tenant-a-dev
+LOG_LEVEL=INFO
+
+through the cluster configuration:
+
+{
+  "spark_env_vars": {
+    "TENANT_ID": "TENANT_A",
+    "APPLICATION_NAME": "tenant-a-platform",
+    "DEPLOYMENT_ENV": "DEV",
+    "SECRET_SCOPE": "tenant-a-dev",
+    "LOG_LEVEL": "INFO"
+  }
+}
+
+These variables are then accessible to Python:
+
+import os
+
+tenant = os.environ["TENANT_ID"]
+environment = os.environ["DEPLOYMENT_ENV"]
+Part 19 — Don't hard-code environment configuration
+
+Instead create:
+
+config/dev.yml
+environment: DEV
+
+variables:
+  TENANT_ID: TENANT_A
+  APPLICATION_NAME: tenant-a-platform
+  DEPLOYMENT_ENV: DEV
+  SECRET_SCOPE: tenant-a-dev
+  LOG_LEVEL: INFO
+
+dependencies:
+  requirements_file: /Volumes/tenant_shared/tenant_a/python_packages/tenant_a_requirements.txt
+
+PREPROD:
+
+environment: PREPROD
+
+variables:
+  TENANT_ID: TENANT_A
+  APPLICATION_NAME: tenant-a-platform
+  DEPLOYMENT_ENV: PREPROD
+  SECRET_SCOPE: tenant-a-preprod
+  LOG_LEVEL: INFO
+
+dependencies:
+  requirements_file: /Volumes/tenant_shared/tenant_a/python_packages/tenant_a_requirements.txt
+
+PROD:
+
+environment: PROD
+
+variables:
+  TENANT_ID: TENANT_A
+  APPLICATION_NAME: tenant-a-platform
+  DEPLOYMENT_ENV: PROD
+  SECRET_SCOPE: tenant-a-prod
+  LOG_LEVEL: WARN
+
+dependencies:
+  requirements_file: /Volumes/tenant_shared/tenant_a/python_packages/tenant_a_requirements.txt
+
+This is what you promote.
+
+Part 20 — Create Key Vault
+
+Create three environment-specific Key Vaults if your bank's security model permits:
+
+kv-tenant-a-dev
+kv-tenant-a-preprod
+kv-tenant-a-prod
+
+For example:
+
+az keyvault create \
+  --name kv-tenant-a-preprod \
+  --resource-group rg-dbx-preprod \
+  --location westeurope
+
+Use your organization's Azure region/resource group naming standards.
+
+Because your Databricks workspace has no public network access, configure the approved private connectivity/DNS route between Databricks and Key Vault.
+
+Part 21 — Add secrets
+
+Example:
+
+az keyvault secret set \
+  --vault-name kv-tenant-a-preprod \
+  --name jdbc-username \
+  --value "<VALUE>"
+az keyvault secret set \
+  --vault-name kv-tenant-a-preprod \
+  --name jdbc-password \
+  --value "<VALUE>"
+
+The secret values never enter Git.
+
+Part 22 — Databricks secret scope
+
+Create the Key Vault-backed scope:
+
+tenant-a-preprod
+
+and configure the Key Vault:
+
+kv-tenant-a-preprod
+
+Similarly:
+
+tenant-a-prod
+       ↓
+kv-tenant-a-prod
+
+Then notebook code:
+
+username = dbutils.secrets.get(
+    scope=os.environ["SECRET_SCOPE"],
+    key="jdbc-username"
+)
+
+password = dbutils.secrets.get(
+    scope=os.environ["SECRET_SCOPE"],
+    key="jdbc-password"
+)
+
+The application code is identical in DEV/PREPROD/PROD.
+
+Part 23 — Validate the DEV cluster
+
+Start the cluster.
+
+Watch the cluster startup.
+
+The expected sequence is:
+
+Cluster start
+    ↓
+Init script
+    ↓
+requirements.txt
+    ↓
+pip install
+    ↓
+pip check
+    ↓
+Spark starts
+
+If installation fails:
+
+Cluster startup fails
+
+This is desirable because an invalid dependency environment should not silently reach users.
+
+Part 24 — Create validation notebook
+
+Create:
+
+notebooks/validate_environment.py
+import importlib
+import os
+
+
+REQUIRED_ENVIRONMENT_VARIABLES = [
+    "TENANT_ID",
+    "APPLICATION_NAME",
+    "DEPLOYMENT_ENV",
+    "SECRET_SCOPE",
+]
+
+
+REQUIRED_PACKAGES = [
+    "pandas",
+    "numpy",
+    "requests",
+    "openpyxl",
+    "yaml",
+    "jsonschema",
+    "cryptography",
+    "tenacity",
+]
+
+
+def validate_environment_variables():
+    missing = [
+        name
+        for name in REQUIRED_ENVIRONMENT_VARIABLES
+        if not os.getenv(name)
+    ]
+
+    if missing:
+        raise RuntimeError(
+            f"Missing environment variables: {missing}"
+        )
+
+
+def validate_packages():
+    failures = []
+
+    for package in REQUIRED_PACKAGES:
+        try:
+            module = importlib.import_module(package)
+
+            version = getattr(module, "__version__", "unknown")
+
+            print(
+                f"{package}: import OK; version={version}"
+            )
+
+        except Exception as exc:
+            failures.append(
+                f"{package}: {exc}"
+            )
+
+    if failures:
+        raise RuntimeError(
+            "Package validation failed:\n"
+            + "\n".join(failures)
+        )
+
+
+def validate_secret():
+    scope = os.environ["SECRET_SCOPE"]
+
+    value = dbutils.secrets.get(
+        scope=scope,
+        key="environment-validation"
+    )
+
+    if not value:
+        raise RuntimeError(
+            "Environment validation secret is empty."
+        )
+
+    print("Secret retrieval: OK")
+
+
+def main():
+    print("================================")
+    print("Tenant A environment validation")
+    print("================================")
+
+    print(
+        f"Tenant: {os.environ['TENANT_ID']}"
+    )
+
+    print(
+        f"Environment: {os.environ['DEPLOYMENT_ENV']}"
+    )
+
+    validate_environment_variables()
+    validate_packages()
+    validate_secret()
+
+    print("================================")
+    print("VALIDATION PASSED")
+    print("================================")
+
+
+main()
+
+Never print the actual secret.
+
+Part 25 — Create DAB configuration
+
+Create:
+
+databricks.yml
+bundle:
+  name: tenant-a-platform
+
+include:
+  - resources/*.yml
+
+variables:
+
+  environment:
+    description: Deployment environment
+
+  requirements_file:
+    description: Tenant A requirements file
+
+targets:
+
+  dev:
+
+    mode: development
+
+    workspace:
+      host: ${var.dev_host}
+
+    variables:
+      environment: DEV
+      requirements_file: /Volumes/tenant_shared/tenant_a/python_packages/tenant_a_requirements.txt
+
+
+  preprod:
+
+    mode: production
+
+    workspace:
+      host: ${var.preprod_host}
+
+    variables:
+      environment: PREPROD
+      requirements_file: /Volumes/tenant_shared/tenant_a/python_packages/tenant_a_requirements.txt
+
+
+  prod:
+
+    mode: production
+
+    workspace:
+      host: ${var.prod_host}
+
+    variables:
+      environment: PROD
+      requirements_file: /Volumes/tenant_shared/tenant_a/python_packages/tenant_a_requirements.txt
+Part 26 — DAB jobs
+
+Create:
+
+resources/jobs.yml
+
+For the classic compute validation job:
+
+resources:
+
+  jobs:
+
+    tenant_a_validation:
+
+      name: tenant-a-validation
+
+      tasks:
+
+        - task_key: validate_environment
+
+          existing_cluster_id: ${var.validation_cluster_id}
+
+          notebook_task:
+            notebook_path: ../notebooks/validate_environment.py
+
+The All-Purpose cluster must already have the init script configured.
+
+Part 27 — Future serverless job
+
+Do not try to use the init script for this.
+
+Serverless job tasks have their own environment/dependency model. Databricks supports dependencies from UC Volumes and requirements.txt references for serverless environments.
+
+Your future serverless configuration should conceptually be:
+
+tasks:
+
+  - task_key: main
+
+    notebook_task:
+      notebook_path: ../notebooks/main.py
+
+    environment_key: tenant_a_serverless
+
+    environment_variables_key: tenant_a_variables
+
+
+environments:
+
+  - environment_key: tenant_a_serverless
+
+    spec:
+      environment_version: "5"
+
+      dependencies:
+        - -r /Volumes/tenant_shared/tenant_a/python_packages/tenant_a_requirements.txt
+
+
+environment_variables:
+
+  - environment_variables_key: tenant_a_variables
+
+    variables:
+      TENANT_ID: TENANT_A
+      APPLICATION_NAME: tenant-a-platform
+      DEPLOYMENT_ENV: PROD
+      SECRET_SCOPE: tenant-a-prod
+      LOG_LEVEL: WARN
+
+Serverless environment variables require the appropriate workspace preview to be enabled and are available to the task process; they are not Spark execution variables.
+
+Validate this DAB schema against the Databricks CLI/DAB version certified by your platform team before production deployment, because serverless environment-variable support is still evolving.
+
+Part 28 — Commit the first version
+
+Once DEV works:
+
+git status
+
+Then:
+
+git add .
+
+Check:
+
+git status
+
+You should see:
+
+new file:
+    databricks.yml
+    requirements/...
+    config/...
+    notebooks/...
+
+Commit:
+
+git commit -m "TENANT-A: add environment bootstrap and DAB"
+
+Push:
+
+git push -u origin feature/tenant-a-environment
+Part 29 — Create Merge Request
+
+In GitLab:
+
+Merge Requests
+   ↓
+New merge request
+
+Source:
+feature/tenant-a-environment
+
+Target:
+main
+
+Add reviewers:
+
+Databricks platform owner
+Security reviewer
+Tenant application owner
+
+CI runs automatically.
+
+Part 30 — GitLab pipeline stages
+
+The pipeline should be:
+
+validate
+    ↓
+deploy_dev
+    ↓
+validate_dev
+    ↓
+deploy_preprod
+    ↓
+validate_preprod
+    ↓
+deploy_prod
+    ↓
+validate_prod
+
+Production is manual.
+
+Part 31 — GitLab variables
+
+Create these in:
+
+GitLab
+→ Settings
+→ CI/CD
+→ Variables
+
+At minimum:
+
+DATABRICKS_DEV_HOST
+DATABRICKS_PREPROD_HOST
+DATABRICKS_PROD_HOST
+
+AZURE_TENANT_ID
+AZURE_CLIENT_ID
+AZURE_CLIENT_SECRET
+
+If using workload identity/OIDC, omit the client secret and use your approved federated authentication configuration.
+
+Mark production credentials:
+
+Protected
+Masked
+Part 32 — GitLab pipeline
+
+Create:
+
+.gitlab-ci.yml
+
+Use:
+
+stages:
+  - validate
+  - deploy_dev
+  - validate_dev
+  - deploy_preprod
+  - validate_preprod
+  - deploy_prod
+  - validate_prod
+
+
+variables:
+  DATABRICKS_CLI_VERSION: "YOUR_APPROVED_VERSION"
+
+
+.default_databricks:
+  image: python:3.11-slim
+
+  before_script:
+
+    - apt-get update
+    - apt-get install -y --no-install-recommends jq bash
+    - rm -rf /var/lib/apt/lists/*
+
+    - pip install --no-cache-dir
+        "databricks-cli==${DATABRICKS_CLI_VERSION}"
+
+    - databricks version
+
+    - |
+      export DATABRICKS_AUTH_TYPE="azure-client-secret"
+      export DATABRICKS_AZURE_TENANT_ID="${AZURE_TENANT_ID}"
+      export DATABRICKS_AZURE_CLIENT_ID="${AZURE_CLIENT_ID}"
+      export DATABRICKS_AZURE_CLIENT_SECRET="${AZURE_CLIENT_SECRET}"
+
+
+validate:
+  stage: validate
+
+  extends:
+    - .default_databricks
+
+  variables:
+    DATABRICKS_HOST: "${DATABRICKS_DEV_HOST}"
+
+  script:
+
+    - test -f requirements/tenant_a_requirements.txt
+    - test -f config/dev.yml
+    - test -f config/preprod.yml
+    - test -f config/prod.yml
+
+    - databricks bundle validate -t dev
+
+  rules:
+
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+
+deploy_dev:
+  stage: deploy_dev
+
+  extends:
+    - .default_databricks
+
+  variables:
+    DATABRICKS_HOST: "${DATABRICKS_DEV_HOST}"
+
+  script:
+
+    - databricks bundle deploy -t dev
+
+  environment:
+    name: dev
+
+  rules:
+
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+
+validate_dev:
+  stage: validate_dev
+
+  extends:
+    - .default_databricks
+
+  variables:
+    DATABRICKS_HOST: "${DATABRICKS_DEV_HOST}"
+
+  script:
+
+    - |
+      databricks bundle run \
+        -t dev \
+        tenant_a_validation
+
+  environment:
+    name: dev
+
+  rules:
+
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+
+deploy_preprod:
+  stage: deploy_preprod
+
+  extends:
+    - .default_databricks
+
+  variables:
+    DATABRICKS_HOST: "${DATABRICKS_PREPROD_HOST}"
+
+  script:
+
+    - databricks bundle deploy -t preprod
+
+  environment:
+    name: preprod
+
+  rules:
+
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+
+validate_preprod:
+  stage: validate_preprod
+
+  extends:
+    - .default_databricks
+
+  variables:
+    DATABRICKS_HOST: "${DATABRICKS_PREPROD_HOST}"
+
+  script:
+
+    - |
+      databricks bundle run \
+        -t preprod \
+        tenant_a_validation
+
+  environment:
+    name: preprod
+
+  rules:
+
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+
+deploy_prod:
+  stage: deploy_prod
+
+  extends:
+    - .default_databricks
+
+  variables:
+    DATABRICKS_HOST: "${DATABRICKS_PROD_HOST}"
+
+  script:
+
+    - databricks bundle deploy -t prod
+
+  environment:
+    name: production
+
+  when: manual
+
+  rules:
+
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+
+validate_prod:
+  stage: validate_prod
+
+  extends:
+    - .default_databricks
+
+  variables:
+    DATABRICKS_HOST: "${DATABRICKS_PROD_HOST}"
+
+  script:
+
+    - |
+      databricks bundle run \
+        -t prod \
+        tenant_a_validation
+
+  environment:
+    name: production
+
+  when: manual
+
+  rules:
+
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+
+Use the Databricks CLI version certified by your organization, rather than blindly using a current version.
+
+Part 33 — The missing piece: library promotion
+
+This is the part I would make explicit in your architecture.
+
+You said:
+
+copy libraries to PREPROD volumes.
+
+There are two separate things:
+
+A. Python source dependency definition
+tenant_a_requirements.txt
+
+This comes from Git.
+
+B. Actual Python wheels
+*.whl
+
+These must be promoted as artifacts.
+
+Don't do:
+
+DEV cluster
+  ↓
+pip freeze
+  ↓
+PREPROD
+
+That is not reproducible.
+
+Instead:
+
+Git requirements.txt
+        ↓
+build wheelhouse
+        ↓
+security scan
+        ↓
+artifact
+        ↓
+PREPROD Volume
+        ↓
+PROD Volume
+Part 34 — Build the wheelhouse
+
+On an approved build machine with package access:
+
+mkdir -p wheelhouse
+
+python -m pip download \
+    --requirement requirements/tenant_a_requirements.txt \
+    --dest wheelhouse
+
+Now:
+
+wheelhouse/
+    pandas-...
+    numpy-...
+    requests-...
+
+Run:
+
+python -m pip install \
+    --no-index \
+    --find-links wheelhouse \
+    --requirement requirements/tenant_a_requirements.txt
+
+Then:
+
+python -m pip check
+
+This gives you a self-contained dependency artifact.
+
+Part 35 — Package the wheelhouse
+tar -czf tenant-a-python-dependencies.tar.gz wheelhouse/
+
+Calculate checksum:
+
+sha256sum tenant-a-python-dependencies.tar.gz
+
+Store the checksum with your release metadata.
+
+Example:
+
+release/
+    tenant-a-python-dependencies-2026.08.31.tar.gz
+    tenant-a-python-dependencies-2026.08.31.sha256
+Part 36 — Copy to PREPROD Volume
+
+The GitLab PREPROD deployment identity uploads the approved artifact to:
+
+/Volumes/tenant_shared/tenant_a/python_packages/
+
+For example:
+
+databricks fs cp \
+    tenant-a-python-dependencies.tar.gz \
+    dbfs:/Volumes/tenant_shared/tenant_a/python_packages/releases/tenant-a-python-dependencies-2026.08.31.tar.gz \
+    --overwrite
+
+But I recommend making the release immutable:
+
+releases/
+    2026.08.31.1/
+        tenant_a_requirements.txt
+        wheels/
+
+instead of overwriting:
+
+tenant_a_requirements.txt
+
+every time.
+
+Part 37 — Better Volume structure
+
+For production:
+
+/Volumes/tenant_shared/tenant_a/python_packages/
+
+├── releases/
+│
+│   ├── 2026.08.31.1/
+│   │   ├── tenant_a_requirements.txt
+│   │   └── wheels/
+│   │       ├── pandas-...
+│   │       ├── numpy-...
+│   │       └── ...
+│   │
+│   └── 2026.09.15.1/
+│       ├── tenant_a_requirements.txt
+│       └── wheels/
+│
+└── current/
+    └── tenant_a_requirements.txt
+
+Then:
+
+current/
+    ↓
+2026.08.31.1
+
+is a controlled pointer.
+
+This gives you easy rollback.
+
+Part 38 — Why this is better than copying DEV Volume blindly
+
+Suppose DEV currently has:
+
+pandas 2.3.3
+requests 2.32.5
+
+and somebody manually changes it.
+
+You don't want PREPROD to inherit that accidental state.
+
+Instead:
+
+Git commit
+    ↓
+release 2026.08.31.1
+    ↓
+security scan
+    ↓
+PREPROD
+
+The release itself is immutable.
+
+Part 39 — Promotion pipeline
+
+The production promotion becomes:
+
+Developer branch
+      │
+      ▼
+Merge Request
+      │
+      ▼
+main
+      │
+      ▼
+Build dependencies
+      │
+      ▼
+Security scan
+      │
+      ▼
+DEV
+      │
+      ▼
+PREPROD
+      │
+      ▼
+UAT
+      │
+      ▼
+Approval
+      │
+      ▼
+PROD
+Part 40 — Update init script to use release path
+
+Rather than:
+
+/Volumes/.../tenant_a_requirements.txt
+
+use:
+
+/Volumes/tenant_shared/tenant_a/python_packages/current/tenant_a_requirements.txt
+
+The init script becomes:
+
+#!/bin/bash
+
+set -Eeuo pipefail
+
+REQUIREMENTS_FILE="/Volumes/tenant_shared/tenant_a/python_packages/current/tenant_a_requirements.txt"
+
+if [[ ! -f "${REQUIREMENTS_FILE}" ]]; then
+    echo "ERROR: Requirements file not found"
+    echo "${REQUIREMENTS_FILE}"
+    exit 10
+fi
+
+python -m pip install \
+    --disable-pip-version-check \
+    --no-cache-dir \
+    --requirement "${REQUIREMENTS_FILE}"
+
+python -m pip check
+
+Now rollback is:
+
+current
+  ↓
+2026.08.30.1
+
+rather than changing the cluster.
+
+Part 41 — But be careful with rollback
+
+Changing:
+
+current
+
+doesn't change an already-running Python environment.
+
+Therefore:
+
+change current
+      ↓
+restart cluster
+      ↓
+init script
+      ↓
+new dependency version
+
+Databricks documents that changing an init script requires affected clusters to be restarted; the same operational principle applies to dependency changes made through the startup process.
+
+Part 42 — Serverless uses the release too
+
+This is the beautiful part.
+
+Serverless can consume:
+
+/Volumes/tenant_shared/tenant_a/python_packages/releases/2026.08.31.1/tenant_a_requirements.txt
+
+through its job environment.
+
+So:
+
+Classic:
+
+release/2026.08.31.1
+        ↓
+init script
+        ↓
+pip
+
+
+Serverless:
+
+release/2026.08.31.1
+        ↓
+job environment
+        ↓
+Python environment
+
+Same dependency artifact.
+
+Serverless supports dependency paths from Unity Catalog Volumes and requirements.txt references.
+
+Part 43 — Serverless migration should be a separate DAB target
+
+I recommend:
+
+resources/
+    jobs-classic.yml
+    jobs-serverless.yml
+
+Today:
+
+preprod
+    → classic
+
+Future:
+
+preprod-serverless
+    → serverless
+
+Then test:
+
+Classic vs Serverless
+
+without disturbing production.
+
+Part 44 — Serverless environment variables
+
+Use:
+
+environment_variables:
+
+  - environment_variables_key: tenant_a
+
+    variables:
+
+      TENANT_ID: TENANT_A
+      APPLICATION_NAME: tenant-a-platform
+      DEPLOYMENT_ENV: PREPROD
+      SECRET_SCOPE: tenant-a-preprod
+      LOG_LEVEL: INFO
+
+Then task:
+
+environment_variables_key: tenant_a
+
+Databricks documents that serverless job environment variables are configured at job level and selected by each task; a task receives only the selected entry.
+
+Part 45 — What changes when you move to Serverless?
+Current Classic	Future Serverless
+All-Purpose cluster	Serverless job
+Init script	Job Environment
+pip install	Environment dependency
+spark_env_vars	Job environment variables
+UC Volume	UC Volume
+requirements.txt	requirements.txt
+DAB	DAB
+GitLab	GitLab
+Key Vault	Key Vault
+Secret scope	Secret scope
+Notebook	Notebook
+
+Therefore your application is largely unchanged.
+
+Part 46 — Complete junior-friendly daily workflow
+
+A junior developer should follow this exact sequence.
+
+1. Pull latest code
+git checkout main
+git pull origin main
+2. Create branch
+git checkout -b feature/update-tenant-a-libraries
+3. Modify requirements
+requirements/tenant_a_requirements.txt
+
+Example:
+
+requests==2.32.5
+
+becomes:
+
+requests==2.32.6
+4. Test locally
+python -m pip check
+5. Commit
+git add requirements/tenant_a_requirements.txt
+
+git commit \
+  -m "TENANT-A: upgrade requests to 2.32.6"
+6. Push
+git push \
+  -u origin feature/update-tenant-a-libraries
+7. Create GitLab MR
+feature/update-tenant-a-libraries
+                ↓
+              main
+8. CI validates
+bundle validate
+dependency checks
+security checks
+9. Reviewer approves
+10. Merge
+
+GitLab:
+
+Merge
+11. GitLab automatically deploys DEV
+main
+ ↓
+DEV
+12. DEV validation
+imports
+environment variables
+secret access
+notebook execution
+13. PREPROD deployment
+same commit
+ ↓
+same dependency artifact
+ ↓
+PREPROD
+14. UAT
+15. Production approval
+16. PROD deployment
+same artifact
+same Git commit
+ ↓
+PROD
+Part 47 — Library upgrade workflow
+
+For your original requirement:
+
+versions may upgrade over months
+
+the lifecycle becomes:
+
+Current
+pandas==2.3.2
+        │
+        ▼
+Security/engineering approves 2.3.3
+        │
+        ▼
+Developer changes Git
+        │
+        ▼
+MR
+        │
+        ▼
+Build wheelhouse
+        │
+        ▼
+Security scan
+        │
+        ▼
+DEV
+        │
+        ▼
+PREPROD
+        │
+        ▼
+PROD
+
+No manual pip install by developers.
+
+Part 48 — Rollback workflow
+
+Suppose:
+
+2026.08.31.1
+
+contains:
+
+pandas==2.3.3
+
+and production breaks.
+
+Rollback:
+
+current
+  ↓
+2026.08.30.4
+
+Then:
+
+restart classic cluster
+
+or:
+
+serverless job
+→ use previous release
+
+This is much safer than trying to remember which packages were manually installed.
+
+Part 49 — Production controls
+
+For a European bank, I would enforce these GitLab rules:
+
+main
+ ├── protected
+ ├── no direct push
+ ├── MR required
+ ├── CODEOWNERS
+ └── security approval
+
+production
+ ├── protected environment
+ ├── manual deployment
+ └── production approver
+
+And:
+
+requirements.txt
+        ↓
+SCA/security scanning
+        ↓
+license scanning
+        ↓
+approved artifact
+
+before PREPROD.
+
+Part 50 — Final production design
+
+Your final implementation should look like this:
+
+                         ┌───────────────┐
+                         │    GitLab     │
+                         └───────┬───────┘
+                                 │
+                ┌────────────────┼─────────────────┐
+                │                │                 │
+                ▼                ▼                 ▼
+          requirements        config             DAB
+                │                │                 │
+                └────────────────┼─────────────────┘
+                                 │
+                            CI/CD pipeline
+                                 │
+               ┌─────────────────┼─────────────────┐
+               │                 │                 │
+              DEV             PREPROD             PROD
+               │                 │                 │
+               ▼                 ▼                 ▼
+       ┌─────────────────────────────────────────────────┐
+       │                  UC Volume                     │
+       │                                                 │
+       │ /Volumes/tenant_shared/tenant_a/               │
+       │          python_packages/                      │
+       │                                                 │
+       │ releases/                                      │
+       │   2026.08.31.1/                               │
+       │       requirements.txt                         │
+       │       wheels/                                 │
+       │                                                 │
+       │ current/                                       │
+       │       requirements.txt                         │
+       └──────────────────────┬──────────────────────────┘
+                              │
+                  ┌───────────┴───────────┐
+                  │                       │
+             CLASSIC                  SERVERLESS
+                  │                       │
+           cluster-scoped             job/task
+           init script                environment
+                  │                       │
+           pip install               dependencies
+                  │                       │
+           spark_env_vars          environment_variables
+                  │                       │
+                  └───────────┬───────────┘
+                              │
+                         SAME NOTEBOOK
+                              │
+                              ▼
+                       dbutils.secrets
+                              │
+                              ▼
+                       Key Vault Scope
+                              │
+                              ▼
+                         Azure Key Vault
+The three rules I would put in the architecture document
+
+Rule 1 — Git is the source of truth.
+
+Never copy a running DEV cluster to PREPROD.
+
+Rule 2 — The dependency artifact is immutable.
+
+Promote the exact tested wheel/requirements artifact from DEV → PREPROD → PROD.
+
+Rule 3 — Keep application configuration independent of compute.
+
+The notebook should know:
+
+os.environ["TENANT_ID"]
+os.environ["DEPLOYMENT_ENV"]
+os.environ["SECRET_SCOPE"]
+
+but should not know whether it is running on:
+
+All-Purpose
+
+or:
+
+Serverless
+
+That gives you a clean architecture today with no cluster policies, while preserving a realistic migration path to Serverless tomorrow. The only component that is intentionally classic-compute-specific is install_tenant_a_libraries.sh; Serverless replaces that mechanism with its native environment/dependency facility.
