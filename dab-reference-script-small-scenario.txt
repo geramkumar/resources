@@ -1,0 +1,572 @@
+this script is only to cerate all purpose cluster with init scipt
+  and a seperate .sh file to perform manual volume to volume file copy
+
+======================================================================
+FOLDER STRUCTURE
+======================================================================
+
+customer-intelligence/
+│
+├── databricks.yml
+│
+├── resources/
+│   ├── volumes/
+│   │   └── si_volume.yml
+│   │
+│   └── clusters/
+│       └── si_all_purpose_cluster.yml
+│
+├── deployment/
+│   └── stage_volume_files.sh
+│
+└── README.md
+
+
+======================================================================
+FILE: databricks.yml
+======================================================================
+
+bundle:
+  name: customer-intelligence
+
+  # Keep CLI version controlled for enterprise CI/CD.
+  databricks_cli_version: "1.14.*"
+
+
+# Include only the resources required for this deployment.
+include:
+  - resources/volumes/*.yml
+  - resources/clusters/*.yml
+
+
+# Source files are NOT used for the Volume files in this design.
+# Therefore, no sync section is required.
+
+
+variables:
+
+  catalog_name:
+    description: Target Unity Catalog catalog
+    default: catalog_dev
+
+  schema_name:
+    description: Target Unity Catalog schema
+    default: service_intelligence_dev
+
+  volume_name:
+    description: Target Volume
+    default: si_volume
+
+  cluster_name:
+    description: All-Purpose Cluster name
+    default: cl_service_intelligence_dev
+
+  runtime_version:
+    description: Databricks Runtime version
+    default: "<DBR-VERSION>"
+
+  node_type_id:
+    description: Azure VM SKU
+    default: "<AZURE-VM-SKU>"
+
+
+targets:
+
+  # ------------------------------------------------------------------
+  # DEV
+  # ------------------------------------------------------------------
+
+  dev:
+
+    mode: development
+
+    default: true
+
+    workspace:
+
+      host: https://<DEV-WORKSPACE-URL>
+
+    variables:
+
+      catalog_name: catalog_dev
+
+      schema_name: service_intelligence_dev
+
+      volume_name: si_volume
+
+      cluster_name: cl_service_intelligence_dev
+
+
+  # ------------------------------------------------------------------
+  # PREPROD
+  # ------------------------------------------------------------------
+
+  preprod:
+
+    mode: production
+
+    workspace:
+
+      host: https://<PREPROD-WORKSPACE-URL>
+
+      root_path: /Workspace/Production/.bundle/${bundle.name}/${bundle.target}
+
+    variables:
+
+      catalog_name: catalog_preprod
+
+      schema_name: service_intelligence_preprod
+
+      volume_name: si_volume
+
+      cluster_name: cl_service_intelligence_preprod
+
+
+  # ------------------------------------------------------------------
+  # PROD
+  # ------------------------------------------------------------------
+
+  prod:
+
+    mode: production
+
+    workspace:
+
+      host: https://<PROD-WORKSPACE-URL>
+
+      root_path: /Workspace/Production/.bundle/${bundle.name}/${bundle.target}
+
+    variables:
+
+      catalog_name: catalog_prod
+
+      schema_name: service_intelligence_prod
+
+      volume_name: si_volume
+
+      cluster_name: cl_service_intelligence_prod
+
+
+======================================================================
+FILE: resources/volumes/si_volume.yml
+======================================================================
+
+resources:
+
+  volumes:
+
+    si_volume:
+
+      name: ${var.volume_name}
+
+      catalog_name: ${var.catalog_name}
+
+      schema_name: ${var.schema_name}
+
+      volume_type: MANAGED
+
+      comment: >
+        Volume containing JDBC drivers, Python requirements
+        and cluster initialization scripts.
+
+
+      # ---------------------------------------------------------------
+      # External volume - example only
+      # ---------------------------------------------------------------
+      #
+      # If your enterprise uses an existing ADLS location:
+      #
+      # volume_type: EXTERNAL
+      #
+      # storage_location: abfss://<CONTAINER>@<STORAGE-ACCOUNT>/<PATH>
+
+
+======================================================================
+FILE: resources/clusters/si_all_purpose_cluster.yml
+======================================================================
+
+resources:
+
+  clusters:
+
+    si_all_purpose_cluster:
+
+      cluster_name: ${var.cluster_name}
+
+      spark_version: ${var.runtime_version}
+
+      node_type_id: ${var.node_type_id}
+
+      driver_node_type_id: ${var.node_type_id}
+
+      num_workers: 2
+
+      autotermination_minutes: 30
+
+
+      # ---------------------------------------------------------------
+      # Security
+      # ---------------------------------------------------------------
+
+      data_security_mode: USER_ISOLATION
+
+
+      # ---------------------------------------------------------------
+      # Environment variables
+      # ---------------------------------------------------------------
+
+      spark_env_vars:
+
+        SI_ENV1: RAM
+
+        SI_ENV2: SI
+
+        SI_ENV3: ${bundle.target}
+
+
+      # ---------------------------------------------------------------
+      # Init script
+      #
+      # This file MUST already exist in the target Volume before
+      # the cluster starts.
+      # ---------------------------------------------------------------
+
+      init_scripts:
+
+        - volumes:
+
+            destination: /Volumes/${var.catalog_name}/${var.schema_name}/${var.volume_name}/scripts/init_script.sh
+
+
+      # ---------------------------------------------------------------
+      # Cluster tags
+      # ---------------------------------------------------------------
+
+      custom_tags:
+
+        Application: customer-intelligence
+
+        Environment: ${bundle.target}
+
+        ManagedBy: DAB
+
+
+      # ---------------------------------------------------------------
+      # Optional / enterprise-policy dependent settings
+      # ---------------------------------------------------------------
+
+      # policy_id: <CLUSTER-POLICY-ID>
+
+      # enable_elastic_disk: true
+
+      # instance_pool_id: <POOL-ID>
+
+      # driver_instance_pool_id: <DRIVER-POOL-ID>
+
+
+======================================================================
+FILE: deployment/stage_volume_files.sh
+======================================================================
+
+#!/bin/bash
+
+set -euo pipefail
+
+
+# --------------------------------------------------------------------
+# Usage
+#
+# ./deployment/stage_volume_files.sh dev
+# ./deployment/stage_volume_files.sh preprod
+# ./deployment/stage_volume_files.sh prod
+# --------------------------------------------------------------------
+
+TARGET="${1:?Usage: ./deployment/stage_volume_files.sh <dev|preprod|prod>}"
+
+
+# --------------------------------------------------------------------
+# Source Volume
+#
+# This is the Volume where the approved source files currently exist.
+# --------------------------------------------------------------------
+
+SOURCE_VOLUME="${SOURCE_SI_VOLUME:?Set SOURCE_SI_VOLUME first}"
+
+
+# --------------------------------------------------------------------
+# Determine target Volume
+# --------------------------------------------------------------------
+
+case "${TARGET}" in
+
+  dev)
+
+    CATALOG="catalog_dev"
+
+    SCHEMA="service_intelligence_dev"
+
+    ;;
+
+
+  preprod)
+
+    CATALOG="catalog_preprod"
+
+    SCHEMA="service_intelligence_preprod"
+
+    ;;
+
+
+  prod)
+
+    CATALOG="catalog_prod"
+
+    SCHEMA="service_intelligence_prod"
+
+    ;;
+
+
+  *)
+
+    echo "Invalid target: ${TARGET}"
+
+    exit 1
+
+    ;;
+
+esac
+
+
+TARGET_VOLUME="/Volumes/${CATALOG}/${SCHEMA}/si_volume"
+
+
+echo "=================================================="
+
+echo "Target      : ${TARGET}"
+
+echo "Source      : ${SOURCE_VOLUME}"
+
+echo "Target      : ${TARGET_VOLUME}"
+
+echo "=================================================="
+
+
+# --------------------------------------------------------------------
+# Create directories
+# --------------------------------------------------------------------
+
+databricks fs mkdir \
+  "${TARGET_VOLUME}/scripts"
+
+databricks fs mkdir \
+  "${TARGET_VOLUME}/libraries"
+
+
+# --------------------------------------------------------------------
+# Copy init script
+# --------------------------------------------------------------------
+
+echo "Copying init_script.sh..."
+
+databricks fs cp \
+  "${SOURCE_VOLUME}/scripts/init_script.sh" \
+  "${TARGET_VOLUME}/scripts/init_script.sh" \
+  --overwrite
+
+
+# --------------------------------------------------------------------
+# Copy requirements.txt
+# --------------------------------------------------------------------
+
+echo "Copying requirements.txt..."
+
+databricks fs cp \
+  "${SOURCE_VOLUME}/libraries/requirements.txt" \
+  "${TARGET_VOLUME}/libraries/requirements.txt" \
+  --overwrite
+
+
+echo "Volume files staged successfully."
+
+
+======================================================================
+FILE: SOURCE VOLUME
+======================================================================
+
+# This is NOT part of the Git repository.
+#
+# Existing approved source files:
+
+/Volumes/<SOURCE-CATALOG>/<SOURCE-SCHEMA>/si_volume/
+│
+├── scripts/
+│   └── init_script.sh
+│
+└── libraries/
+    └── requirements.txt
+
+
+======================================================================
+FILE: init_script.sh
+======================================================================
+
+#!/bin/bash
+
+set -e
+
+
+# ====================================================================
+# 1. ENVIRONMENT VARIABLES
+# ====================================================================
+
+export SI_ENV1="RAM"
+
+export SI_ENV2="SI"
+
+export SI_ENV3="${SI_ENV3:-UNKNOWN}"
+
+
+# ====================================================================
+# 2. PYTHON PACKAGE INSTALLATION
+# ====================================================================
+
+REQUIREMENTS_FILE="/Volumes/${SI_CATALOG}/${SI_SCHEMA}/${SI_VOLUME}/libraries/requirements.txt"
+
+
+echo "Environment  : ${SI_ENV3}"
+
+echo "Installing packages from:"
+echo "${REQUIREMENTS_FILE}"
+
+
+if [ -f "${REQUIREMENTS_FILE}" ]; then
+
+    /databricks/python/bin/pip install \
+        -r "${REQUIREMENTS_FILE}"
+
+else
+
+    echo "ERROR: requirements.txt not found:"
+    echo "${REQUIREMENTS_FILE}"
+
+    exit 1
+
+fi
+
+
+echo "Init script completed successfully."
+
+
+======================================================================
+FILE: requirements.txt
+======================================================================
+
+# Example packages.
+# Replace with your approved enterprise dependencies.
+
+pandas
+requests
+
+
+======================================================================
+FILE: README.md
+======================================================================
+
+# Customer Intelligence - All Purpose Cluster
+
+This DAB creates:
+
+1. Unity Catalog Volume
+2. Required Volume directories
+3. init_script.sh in the target Volume
+4. requirements.txt in the target Volume
+5. All-Purpose Cluster
+6. Cluster initialization using init_script.sh
+
+
+----------------------------------------------------------------------
+DEPLOYMENT SEQUENCE
+----------------------------------------------------------------------
+
+# 1. Validate bundle
+
+databricks bundle validate -t dev
+
+
+# 2. Deploy Volume
+
+databricks bundle deploy -t dev
+
+
+# 3. Stage files into Volume
+
+export SOURCE_SI_VOLUME=/Volumes/<SOURCE-CATALOG>/<SOURCE-SCHEMA>/si_volume
+
+./deployment/stage_volume_files.sh dev
+
+
+# 4. Deploy/update cluster
+
+databricks bundle deploy -t dev
+
+
+----------------------------------------------------------------------
+PREPROD
+----------------------------------------------------------------------
+
+databricks bundle validate -t preprod
+
+databricks bundle deploy -t preprod
+
+export SOURCE_SI_VOLUME=/Volumes/<SOURCE-CATALOG>/<SOURCE-SCHEMA>/si_volume
+
+./deployment/stage_volume_files.sh preprod
+
+databricks bundle deploy -t preprod
+
+
+----------------------------------------------------------------------
+PROD
+----------------------------------------------------------------------
+
+databricks bundle validate -t prod
+
+databricks bundle deploy -t prod
+
+export SOURCE_SI_VOLUME=/Volumes/<SOURCE-CATALOG>/<SOURCE-SCHEMA>/si_volume
+
+./deployment/stage_volume_files.sh prod
+
+databricks bundle deploy -t prod
+
+
+----------------------------------------------------------------------
+TARGET VOLUME STRUCTURE
+----------------------------------------------------------------------
+
+/Volumes/<catalog>/<schema>/si_volume/
+
+├── scripts/
+│   └── init_script.sh
+│
+└── libraries/
+    └── requirements.txt
+
+
+----------------------------------------------------------------------
+CLUSTER INITIALIZATION
+----------------------------------------------------------------------
+
+Cluster
+   |
+   | init_scripts
+   v
+/Volumes/<catalog>/<schema>/si_volume/scripts/init_script.sh
+   |
+   +--> sets SI_ENV1
+   +--> sets SI_ENV2
+   +--> sets SI_ENV3
+   |
+   +--> reads requirements.txt
+   |
+   +--> pip install
