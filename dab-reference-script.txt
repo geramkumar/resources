@@ -1,0 +1,558 @@
+PROMPT:
+
+generate folder structure (in one script block) and all the scripts (in one script block) for the below dab requirement
+
+3 environments (dev, preprod, prod - each have its owne seperate service principal)
+all purpose cluster in each environments (call init_scipt.sh which is stored in volume si_volume/scripts/init_script.sh)
+3 notebooks (notebook1, notebook2, notebook3) stored in worksapce path workspace/ramkumar.gopal/
+one job that uses all purpose cluster and call notebook 1, scheduled weekly on sunday at 9 am cet
+few driver files are stored in volume si_volume/drivers/. this needs to be copied in target volume
+requirements.txt is stored in volume si_volume/libraries (this path is referenced in init_script). this needs to be copied in target volume
+init script is stored in volume si_volume/scripts/. this needs to be copied in target volume and called from init_script in all purpose cluster
+for the user, init script should have 2 key areas (call init_script.sh and define 3 environment variables such as si_env1="RAM",si_env2="SI", si_env3="PROD"
+
+
+DAB Workflow:
+
+1. Read databricks.yml
+        ↓
+2. Load included YAML files
+        ↓
+3. Select target = dev
+        ↓
+4. Resolve ${var.xxx}, ${bundle.target}, etc.
+        ↓
+5. Validate the COMPLETE bundle
+        ↓
+6. Synchronize source files
+        ↓
+7. Create/update resources
+        ├── Volume
+        ├── Cluster
+        ├── Job
+        └── Permissions
+
+
+FOLDER STRUCTURE:
+
+customer-intelligence/
+│
+├── databricks.yml
+│
+├── resources/
+│   ├── volumes/
+│   │   └── si_volume.yml
+│   │
+│   ├── clusters/
+│   │   └── si_all_purpose_cluster.yml
+│   │
+│   ├── jobs/
+│   │   └── si_job.yml
+│   │
+│   └── permissions/
+│       └── permissions.yml
+│
+├── src/
+│   └── notebooks/
+│       ├── notebook1.py
+│       ├── notebook2.py
+│       └── notebook3.py
+│
+├── deployment/
+│   └── stage_volume_files.sh
+│
+└── README.md
+
+# Existing source files in the source Volume
+# (not necessarily inside the Git repository)
+#
+# /Volumes/<source-catalog>/<source-schema>/si_volume/
+# ├── scripts/
+# │   └── init_script.sh
+# ├── drivers/
+# │   ├── jdbc-driver-1.jar
+# │   └── jdbc-driver-2.jar
+# └── libraries/
+#     └── requirements.txt
+
+
+
+######################################################################
+# FILE: databricks.yml
+######################################################################
+
+bundle:
+  name: customer-intelligence
+  databricks_cli_version: "1.14.*"
+  engine: direct
+
+include: # DAB effectively combines these definitions into the bundle configuration before validating/deploying. Important: include does not mean "upload these files to the .bundle folder." It means "include these YAML files as DAB configuration." The resources defined inside them are then deployed by DAB.
+  - resources/volumes/*.yml
+  - resources/clusters/*.yml
+  - resources/jobs/*.yml
+  - resources/permissions/*.yml
+
+sync: # will be copied in target
+  include:
+    - src/**
+  exclude:
+    - "**/__pycache__/**"
+    - "**/*.pyc"
+
+
+variables:
+
+## Bundle variables declared in databricks.yml are available across the entire DAB configuration, including YAML files brought in through include.
+## You reference them as:
+## ${var.catalog_name}
+## ${var.schema_name}
+
+  catalog_name:
+    description: Target Unity Catalog catalog
+    default: catalog_dev
+
+  schema_name:
+    description: Target Unity Catalog schema
+    default: service_intelligence
+
+  volume_name:
+    description: Target volume
+    default: si_volume
+
+  service_principal_name:
+    description: Environment service principal
+    default: ""
+
+  cluster_name:
+    description: All-purpose cluster name
+    default: cl_service_intelligence
+
+  notebook_root:
+    description: Workspace notebook root
+    default: /Workspace/Users/ramkumar.gopal
+
+  runtime_version:
+    description: Databricks Runtime
+    default: "<DBR-VERSION>"
+
+  node_type_id:
+    description: Azure VM SKU
+    default: "<AZURE-VM-SKU>"
+
+
+targets:
+
+  ####################################################################
+  # DEV
+  ####################################################################
+
+  dev:
+
+    mode: development
+
+    default: true
+
+    workspace:
+
+      host: https://<DEV-WORKSPACE-URL>
+
+    variables:
+
+      catalog_name: catalog_dev
+      schema_name: service_intelligence_dev
+      volume_name: si_volume
+
+      service_principal_name: <DEV-SERVICE-PRINCIPAL>
+
+      cluster_name: cl_service_intelligence_dev
+
+      notebook_root: /Workspace/Users/ramkumar.gopal
+
+
+  ####################################################################
+  # PREPROD
+  ####################################################################
+
+  preprod:
+
+    mode: production
+
+    workspace:
+
+      host: https://<PREPROD-WORKSPACE-URL>
+
+      root_path: /Workspace/Production/.bundle/${bundle.name}/${bundle.target}
+
+    variables:
+
+      catalog_name: catalog_preprod
+      schema_name: service_intelligence_preprod
+      volume_name: si_volume
+
+      service_principal_name: <PREPROD-SERVICE-PRINCIPAL>
+
+      cluster_name: cl_service_intelligence_preprod
+
+      notebook_root: /Workspace/Users/ramkumar.gopal
+
+
+  ####################################################################
+  # PROD
+  ####################################################################
+
+  prod:
+
+    mode: production
+
+    workspace:
+
+      host: https://<PROD-WORKSPACE-URL>
+
+      root_path: /Workspace/Production/.bundle/${bundle.name}/${bundle.target}
+
+    variables:
+
+      catalog_name: catalog_prod
+      schema_name: service_intelligence_prod
+      volume_name: si_volume
+
+      service_principal_name: <PROD-SERVICE-PRINCIPAL>
+
+      cluster_name: cl_service_intelligence_prod
+
+      notebook_root: /Workspace/Users/ramkumar.gopal
+
+    run_as:
+
+      service_principal_name: <PROD-SERVICE-PRINCIPAL>
+
+
+######################################################################
+# FILE: resources/volumes/si_volume.yml
+######################################################################
+
+resources:
+
+  volumes:
+
+    si_volume:
+
+      catalog_name: ${var.catalog_name}
+
+      schema_name: ${var.schema_name}
+
+      name: ${var.volume_name}
+
+      volume_type: MANAGED
+
+      comment: >
+        Application volume containing JDBC drivers,
+        requirements and cluster initialization script.
+
+      # Optional for an external volume:
+      #
+      # volume_type: EXTERNAL
+      # storage_location: abfss://...
+
+
+######################################################################
+# FILE: resources/clusters/si_all_purpose_cluster.yml
+######################################################################
+
+resources:
+
+  clusters:
+
+    si_all_purpose_cluster:
+
+      cluster_name: ${var.cluster_name}
+
+      spark_version: ${var.runtime_version}
+
+      node_type_id: ${var.node_type_id}
+
+      driver_node_type_id: ${var.node_type_id}
+
+      num_workers: 2
+
+      autotermination_minutes: 30
+
+      data_security_mode: USER_ISOLATION
+
+      spark_env_vars:
+
+        SI_ENV1: RAM
+
+        SI_ENV2: SI
+
+        SI_ENV3: ${bundle.target}
+
+      init_scripts:
+
+        - volumes:
+
+            destination: /Volumes/${var.catalog_name}/${var.schema_name}/${var.volume_name}/scripts/init_script.sh
+
+      custom_tags:
+
+        Application: customer-intelligence
+
+        Environment: ${bundle.target}
+
+        ManagedBy: DAB
+
+        Owner: service-intelligence
+
+
+######################################################################
+# FILE: resources/jobs/si_job.yml
+######################################################################
+
+resources:
+
+  jobs:
+
+    service_intelligence_job:
+
+      name: ${bundle.target}-service-intelligence
+
+      description: >
+        Weekly Service Intelligence processing job.
+
+      schedule:
+
+        quartz_cron_expression: "0 0 9 ? * SUN"
+
+        timezone_id: "Europe/Paris"
+
+        pause_status: UNPAUSED
+
+      tasks:
+
+        - task_key: notebook1
+
+          existing_cluster_id: ${resources.clusters.si_all_purpose_cluster.id}
+
+          notebook_task:
+
+            # notebook_path: ${var.notebook_root}/notebook1
+            notebook_path: ../src/notebooks/notebook1.py
+
+
+            source: WORKSPACE
+
+          # Optional parameters:
+          #
+          # base_parameters:
+          #   environment: ${bundle.target}
+          #   catalog: ${var.catalog_name}
+          #   schema: ${var.schema_name}
+
+      max_concurrent_runs: 1
+
+      tags:
+
+        Application: customer-intelligence
+
+        Environment: ${bundle.target}
+
+        ManagedBy: DAB
+
+
+######################################################################
+# FILE: resources/permissions/permissions.yml
+######################################################################
+
+resources:
+
+  clusters:
+
+    si_all_purpose_cluster:
+
+      permissions:
+
+        - level: CAN_MANAGE
+
+          service_principal_name: ${var.service_principal_name}
+
+        - level: CAN_ATTACH_TO
+
+          group_name: data-engineering-users
+
+
+  jobs:
+
+    service_intelligence_job:
+
+      permissions:
+
+        - level: CAN_MANAGE_RUN
+
+          service_principal_name: ${var.service_principal_name}
+
+        - level: CAN_VIEW
+
+          group_name: data-engineering-users
+
+
+######################################################################
+# FILE: src/notebooks/notebook1.py
+######################################################################
+
+from pyspark.sql import functions as F
+
+print("Executing notebook1")
+
+print(f"Environment: {spark.conf.get('spark.databricks.clusterUsageTags.clusterName')}")
+
+df = spark.createDataFrame(
+    [
+        (1, "Customer A"),
+        (2, "Customer B")
+    ],
+    ["id", "name"]
+)
+
+display(df)
+
+
+######################################################################
+# FILE: src/notebooks/notebook2.py
+######################################################################
+
+print("Executing notebook2")
+
+# Business processing goes here.
+
+
+######################################################################
+# FILE: src/notebooks/notebook3.py
+######################################################################
+
+print("Executing notebook3")
+
+# Business processing goes here.
+
+
+######################################################################
+# FILE: deployment/stage_volume_files.sh
+######################################################################
+
+#!/bin/bash
+
+set -euo pipefail
+
+TARGET="${1:?Target is required}"
+
+echo "Staging SI volume files for target: ${TARGET}"
+
+case "${TARGET}" in
+
+  dev)
+    CATALOG="catalog_dev"
+    SCHEMA="service_intelligence_dev"
+    ;;
+
+  preprod)
+    CATALOG="catalog_preprod"
+    SCHEMA="service_intelligence_preprod"
+    ;;
+
+  prod)
+    CATALOG="catalog_prod"
+    SCHEMA="service_intelligence_prod"
+    ;;
+
+  *)
+    echo "Invalid target: ${TARGET}"
+    exit 1
+    ;;
+
+esac
+
+
+TARGET_VOLUME="/Volumes/${CATALOG}/${SCHEMA}/si_volume"
+
+SOURCE_VOLUME="${SOURCE_SI_VOLUME:?SOURCE_SI_VOLUME must be set}"
+
+
+echo "Target volume: ${TARGET_VOLUME}"
+
+echo "Creating directories..."
+
+databricks fs mkdir "${TARGET_VOLUME}/scripts"
+
+databricks fs mkdir "${TARGET_VOLUME}/drivers"
+
+databricks fs mkdir "${TARGET_VOLUME}/libraries"
+
+
+echo "Copying init script..."
+
+databricks fs cp \
+  "${SOURCE_VOLUME}/scripts/init_script.sh" \
+  "${TARGET_VOLUME}/scripts/init_script.sh" \
+  --overwrite
+
+
+echo "Copying JDBC drivers..."
+
+databricks fs cp \
+  "${SOURCE_VOLUME}/drivers/" \
+  "${TARGET_VOLUME}/drivers/" \
+  --recursive \
+  --overwrite
+
+
+echo "Copying requirements.txt..."
+
+databricks fs cp \
+  "${SOURCE_VOLUME}/libraries/requirements.txt" \
+  "${TARGET_VOLUME}/libraries/requirements.txt" \
+  --overwrite
+
+
+echo "Volume staging completed."
+
+
+######################################################################
+# FILE: README.md
+######################################################################
+
+# Customer Intelligence DAB
+
+## Validate
+
+databricks bundle validate -t dev
+
+
+## Deploy
+
+databricks bundle deploy -t dev
+
+databricks bundle deploy -t preprod
+
+databricks bundle deploy -t prod
+
+
+## Stage Volume Files
+
+Set the source volume:
+
+export SOURCE_SI_VOLUME=/Volumes/<SOURCE-CATALOG>/<SOURCE-SCHEMA>/si_volume
+
+
+Then stage files:
+
+./deployment/stage_volume_files.sh dev
+
+./deployment/stage_volume_files.sh preprod
+
+./deployment/stage_volume_files.sh prod
+
+
+## Run Job
+
+databricks bundle run \
+  -t dev \
+  service_intelligence_job
