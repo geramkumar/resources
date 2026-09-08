@@ -11,6 +11,13 @@ requirements.txt is stored in volume si_volume/libraries (this path is reference
 init script is stored in volume si_volume/scripts/. this needs to be copied in target volume and called from init_script in all purpose cluster
 for the user, init script should have 2 key areas (call init_script.sh and define 3 environment variables such as si_env1="RAM",si_env2="SI", si_env3="PROD"
 
+Note:
+** sync: uploads files to the DAB workspace bundle location:
+.bundle/<bundle>/<target>/files/
+It does not copy files into:
+/Volumes/<catalog>/<schema>/si_volume/
+
+
 
 DAB Workflow:
 
