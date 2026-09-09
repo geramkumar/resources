@@ -1,0 +1,51 @@
+provide end to end dab scripts to perform the below tasks (all in one script block). i will extend cluster creation
+
+1. create a schema named schema1 under catalog1
+2. create a volume named si\_volume under catalog1
+3. create folders and files under si\_volume
+
+
+
+volume\_files/ ├── scripts/ │   └── init\_script.sh ├── libraries/ │   └── requirements.txt └── jdbc/     └── postgresql-42.x.x.jar  
+
+volume_files/
+├── scripts/
+│   └── init_script.sh
+├── libraries/
+│   └── requirements.txt
+└── jdbc/
+    └── postgresql-42.x.x.jar
+
+=====================================================
+# stage_volume_files.sh
+
+#!/bin/bash
+set -euo pipefail
+
+TARGET_VOLUME="/Volumes/${CATALOG_NAME}/${SCHEMA_NAME}/si_volume"
+
+echo "Staging files to ${TARGET_VOLUME}"
+
+databricks fs cp \
+  "volume_files/scripts/init_script.sh" \
+  "${TARGET_VOLUME}/scripts/init_script.sh" \
+  --overwrite
+
+databricks fs cp \
+  "volume_files/libraries/requirements.txt" \
+  "${TARGET_VOLUME}/libraries/requirements.txt" \
+  --overwrite
+
+for jar in volume_files/jdbc/*.jar; do
+    [ -e "$jar" ] || continue
+
+    databricks fs cp \
+      "$jar" \
+      "${TARGET_VOLUME}/jdbc/$(basename "$jar")" \
+      --overwrite
+done
+
+echo "Volume files staged successfully."
+
+=====================================================
+
