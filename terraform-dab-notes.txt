@@ -1,3 +1,6 @@
+Terraform: Primarily manages Azure infrastructure through the Azure Resource Manager (ARM) control plane, and Databricks platform/governance resources through the Databricks provider/API.
+DAB (Declarative Automation Bundles): Primarily manages and deploys Databricks application/workload resources through the Databricks control plane, including source code, jobs, pipelines, compute, and supported Unity Catalog resources.
+
 AZURE DATABRICKS
 │
 ├── TERRAFORM — Azure & Databricks Platform / Foundation
