@@ -1,0 +1,91 @@
+AZURE DATABRICKS
+│
+├── TERRAFORM — Azure & Databricks Platform / Foundation
+│   │
+│   ├── Azure Infrastructure
+│   │   ├── Resource Group                  → Terraform
+│   │   ├── VNet                            → Terraform
+│   │   ├── Subnets                         → Terraform
+│   │   ├── NSGs                            → Terraform
+│   │   ├── Route Tables                    → Terraform
+│   │   ├── NAT Gateway                     → Terraform
+│   │   ├── Private Endpoints                → Terraform
+│   │   ├── Private DNS Zones                → Terraform
+│   │   ├── ADLS Gen2 Storage Account        → Terraform
+│   │   ├── Storage Containers / Filesystems → Terraform
+│   │   ├── Key Vault                        → Terraform
+│   │   ├── Managed Identity                 → Terraform
+│   │   ├── Databricks Access Connector      → Terraform
+│   │   ├── Azure RBAC                       → Terraform
+│   │   └── Azure Databricks Workspace       → Terraform
+│   │
+│   ├── Monitoring
+│   │   ├── Log Analytics Workspace          → Terraform
+│   │   ├── Diagnostic Settings              → Terraform
+│   │   └── Azure Monitor / Alerts            → Terraform
+│   │
+│   └── Unity Catalog — Platform
+│       ├── Metastore                        → Terraform
+│       ├── Metastore Assignment             → Terraform
+│       ├── Storage Credentials              → Terraform
+│       ├── External Locations               → Terraform
+│       ├── Workspace Bindings               → Terraform
+│       ├── Catalogs                         → Terraform
+│       ├── Platform Schemas                 → Terraform
+│       ├── Groups / Service Principals      → Terraform
+│       └── Platform-level Grants            → Terraform
+│
+│
+└── DAB — Declarative Automation Bundle
+    │
+    ├── Source Code
+    │   ├── Notebooks                        → DAB sync/deploy → Job / Pipeline executes
+    │   ├── Python source                     → DAB sync/deploy → Job / Pipeline executes
+    │   ├── SQL source                        → DAB sync/deploy → Job / SQL task executes
+    │   ├── Python packages                   → DAB deploy → Job executes
+    │   ├── Python Wheels                     → CI/CD builds → DAB deploys → Job executes
+    │   ├── Libraries / Dependencies          → DAB / Cluster configuration → Job / Cluster uses
+    │   └── Tests                              → CI/CD + DAB project → Execute during CI/CD
+    │
+    ├── Jobs / Workflows
+    │   ├── Jobs                              → DAB natively supported
+    │   ├── Tasks                             → DAB natively supported
+    │   ├── Task Dependencies                 → DAB natively supported
+    │   ├── Schedules                         → DAB natively supported
+    │   ├── Triggers                          → DAB natively supported
+    │   ├── Parameters                        → DAB natively supported
+    │   ├── Retry Configuration               → DAB natively supported
+    │   └── Notifications                     → DAB natively supported
+    │
+    ├── Compute
+    │   ├── All-Purpose / Interactive Cluster → DAB natively supported
+    │   ├── Job Cluster                       → DAB natively supported
+    │   ├── Cluster Policy                    → DAB natively supported
+    │   ├── Instance Pool                     → DAB natively supported
+    │   └── SQL Warehouse                     → DAB natively supported
+    │
+    ├── Data Pipelines
+    │   └── Lakeflow Declarative Pipeline     → DAB natively supported
+    │
+    ├── Unity Catalog Resources
+    │   ├── Catalog                            → DAB natively supported
+    │   ├── Schema                             → DAB natively supported
+    │   ├── Volume                             → DAB natively supported
+    │   └── External Location                  → DAB natively supported
+    │
+    ├── Data Objects
+    │   ├── Managed Tables                     → Not native DAB resource → SQL → Job / Pipeline
+    │   ├── External Tables                    → Not native DAB resource → SQL → Job / Pipeline
+    │   ├── Views                              → Not native DAB resource → SQL → Job / SQL task
+    │   ├── Materialized Views                 → Not native DAB resource → SQL / Pipeline
+    │   ├── Functions                          → Not native DAB resource → SQL → Job / SQL task
+    │   ├── Stored Procedures                  → Not native DAB resource → SQL → Job / SQL task
+    │   ├── Constraints                        → Not native DAB resource → SQL → Job / Migration
+    │   └── Table Properties / Comments        → Not native DAB resource → SQL → Job / Migration
+    │
+    └── Volume Contents
+        ├── Folders                            → Not native DAB resource → CLI / script creates
+        ├── Files                              → Not native DAB resource → CLI / script / Terraform uploads
+        ├── JAR / JDBC Drivers                 → Not native DAB resource → CLI / script / Terraform uploads
+        ├── requirements.txt                   → Not native DAB resource → CLI / script / Terraform uploads
+        └── init_script.sh                     → Not native DAB resource → CLI / script / Terraform uploads
