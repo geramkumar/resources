@@ -1,0 +1,148 @@
+SELECT
+    external_location_name,
+    principal,
+    privilege
+FROM system.information_schema.external_location_privileges
+ORDER BY
+    external_location_name,
+    principal,
+    privilege;
+
+
+SELECT
+    credential_name,
+    principal,
+    privilege
+FROM system.information_schema.credential_privileges
+ORDER BY
+    credential_name,
+    principal,
+    privilege;
+
+SELECT
+    el.external_location_name,
+    el.url                         AS adls_path,
+    el.storage_credential_name,
+    el.storage_credential_id,
+
+    c.credential_type,
+    c.credential_owner,
+    c.used_for_managed_storage,
+
+    el.external_location_owner,
+    el.read_only,
+
+    CASE
+        WHEN c.credential_name IS NULL
+            THEN '❌ BROKEN - CREDENTIAL MISSING'
+        ELSE '✅ OK - CREDENTIAL EXISTS'
+    END AS credential_check,
+
+    el.created,
+    el.last_altered
+
+FROM system.information_schema.external_locations el
+
+LEFT JOIN system.information_schema.credentials c
+    ON el.storage_credential_id = c.credential_id
+
+ORDER BY el.external_location_name;
+
+-------------------------
+
+-- ============================================================
+-- UC STORAGE CHAIN INVENTORY
+-- Azure ADLS -> Storage Credential -> External Location
+-- -> Catalog -> Schema -> Tables / Volumes
+-- ============================================================
+
+WITH
+credentials AS
+(
+    SELECT
+        credential_id,
+        credential_name,
+        credential_type,
+        credential,
+        credential_owner,
+        used_for_managed_storage,
+        created,
+        last_altered
+    FROM system.information_schema.credentials
+),
+
+external_locations AS
+(
+    SELECT
+        external_location_name,
+        external_location_owner,
+        url,
+        storage_credential_id,
+        storage_credential_name,
+        read_only,
+        created,
+        last_altered
+    FROM system.information_schema.external_locations
+),
+
+catalogs AS
+(
+    SELECT
+        catalog_name,
+        catalog_owner,
+        created,
+        last_altered
+    FROM system.information_schema.catalogs
+),
+
+schemas AS
+(
+    SELECT
+        catalog_name,
+        schema_name,
+        schema_owner,
+        created,
+        last_altered
+    FROM system.information_schema.schemata
+)
+
+SELECT
+    c.credential_name,
+    c.credential_type,
+    c.credential_owner,
+
+    el.external_location_name,
+    el.url AS external_location_url,
+
+    cat.catalog_name,
+
+    sch.schema_name,
+
+    CASE
+        WHEN c.credential_name IS NULL
+            THEN 'BROKEN: CREDENTIAL NOT FOUND'
+
+        WHEN el.external_location_name IS NULL
+            THEN 'BROKEN: EXTERNAL LOCATION NOT FOUND'
+
+        ELSE 'UC METADATA CHAIN EXISTS'
+    END AS uc_chain_status
+
+FROM credentials c
+
+LEFT JOIN external_locations el
+    ON c.credential_id = el.storage_credential_id
+
+LEFT JOIN catalogs cat
+    ON el.url LIKE '%'
+    
+LEFT JOIN schemas sch
+    ON cat.catalog_name = sch.catalog_name
+
+ORDER BY
+    c.credential_name,
+    el.external_location_name,
+    cat.catalog_name,
+    sch.schema_name;
+
+------------------------------
